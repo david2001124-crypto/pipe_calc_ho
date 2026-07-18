@@ -159,21 +159,21 @@ material_keys = list(material_db.MATERIAL_MAP.keys())
 selected_sys_material = st.selectbox("⚓ 배관 재질 매핑 (Material & Roughness)", [None] + material_keys)
 if selected_sys_material:
     mat_info = material_db.MATERIAL_MAP[selected_sys_material]
-    roughness_sci = f"{mat_info['roughness_m']:.2e}".replace("e", " x 10^")
+    roughness = mat_info["roughness_m"]
+    roughness_sci = f"{roughness:.2e}".replace("e", " x 10^")
     st.info(f"선택 반영: 절대 조도 **{roughness_sci} m** | {mat_info['asme_category']} - {mat_info['asme_grade']}")
 
-st.subheader("3.1 피팅 및 밸브 설정 (Fittings & Valves)")
-selected_fittings = st.multiselect("배관에 포함된 피팅/밸브 선택 (선택사항)", list(material_db.FITTING_DB.keys()), default=None)
-total_k_factor = 0.0
+st.subheader("3.1 피팅 및 밸브 설정 (Fittings & Valves - Equivalent Length)")
+selected_fittings = st.multiselect("배관에 포함된 피팅/밸브 선택 (선택사항)", list(material_db.FITTING_LE_D_DB.keys()), default=None)
+total_Le_D = 0.0
 if selected_fittings:
     fit_cols = st.columns(len(selected_fittings))
     for i, fit_name in enumerate(selected_fittings):
         qty = fit_cols[i].number_input(f"{fit_name} 수량", min_value=1, value=1, step=1, key=f"fit_{i}")
-        total_k_factor += material_db.FITTING_DB[fit_name] * qty
-st.info(f"총 국부 손실 계수 (Total K-factor): **{total_k_factor:.4f}**")
+        total_Le_D += material_db.FITTING_LE_D_DB[fit_name] * qty
+st.info(f"총 등가 길이 비 (Total L_e/D): **{total_Le_D:.1f}**")
 
-col_ins1, col_ins2 = st.columns(2)
-t_ins = col_ins1.number_input("보온재 두께 (m, 없으면 0)", value=None, format="%.4f")
+st.header("4. 외부 환경 (Environment)")
 increments = col_env3.number_input("배관 분할 개수 (Nodes)", value=None, step=None, format="%.0f")
 
 st.divider()
@@ -221,9 +221,12 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
     D_outer = D_inner + 2 * thickness
     t_ins_calc, k_ins_calc = t_ins, (k_ins if k_ins is not None else 0.0)
     
-    K_node = total_k_factor / increments # 국부 손실 계수를 분할된 노드 구간에 균등 분배
+    # 등가 길이(Equivalent Length) 실제 미터(m) 단위 환산 및 노드 분배
+    total_Le_m = total_Le_D * D_inner
+    Le_node = total_Le_m / increments 
+    
     A_cross = math.pi * (D_inner / 2)**2
-    G_flux = mass_flow / A_cross # 질량 유속 (Mass Flux, kg/m²s)
+    G_flux = mass_flow / A_cross 
     
     results = []
     first_node_debug = {}
@@ -260,16 +263,17 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
                 Re = (rho * velocity * D_inner) / mu
                 f_factor = churchill_friction_factor(Re, roughness/D_inner)
                 
-                dP_dl_fric = (f_factor * rho * velocity**2) / (2 * D_inner)
-                dP_dl_elev = rho * 9.81 * math.sin(math.radians(elevation_angle))
+                # 마찰은 (실제 길이 + 등가 길이)에 작용, 고저차는 (실제 길이)에만 작용
+                dP_fric_node = ((f_factor * rho * velocity**2) / (2 * D_inner)) * (dL + Le_node)
+                dP_elev_node = (rho * 9.81 * math.sin(math.radians(elevation_angle))) * dL
                 
-                dP_fit_node = K_node * (G_flux**2) / (2 * rho)
-                dP_dl_total = dP_dl_fric + dP_dl_elev + (dP_fit_node / dL)
+                dP_node_total = dP_fric_node + dP_elev_node
+                dP_dl_total = dP_node_total / dL # 표출용 환산 (Pa/m)
                 flow_regime = "1-Phase"
                 Pr = (Cp * mu) / k_fluid
                 
                 if i == 0:
-                    first_node_debug = {"상태": "단상 (1-Phase)", "밀도": rho, "점도": mu, "Re": Re, "k_pipe": k_pipe_current, "K_node": K_node, "dP_fit(Pa)": dP_fit_node}
+                    first_node_debug = {"상태": "단상 (1-Phase)", "밀도": rho, "점도": mu, "Re": Re, "k_pipe": k_pipe_current, "Le_node(m)": Le_node, "f_factor": f_factor}
             else:
                 rho_L = PropsSI('D', 'P', P_current_Pa, 'Q', 0, fluid_string)
                 rho_G = PropsSI('D', 'P', P_current_Pa, 'Q', 1, fluid_string)
@@ -287,15 +291,15 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
                 
                 bb_result = calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, elevation_angle, roughness, P_current_Pa)
                 
-                # B. 등가 길이(Equivalent Length, L_e/D) 기반 2상 마찰 배수 적용
-                # 피팅의 K값을 등가 길이로 간주하고, Beggs & Brill의 2상 마찰 보정 승수(exp_S)와 혼합 밀도(rho_n)를 적용
-                rho_n = bb_result["rho_n"]
-                exp_S = bb_result["exp_S"]
-                v_m = bb_result["v_m"]
-                dP_fit_node = K_node * (rho_n * v_m**2) / 2.0 * exp_S
+                # B. 등가 길이법 (Equivalent Length Method)을 활용한 2상 마찰 보정
+                # 마찰은 (실제 길이 + 등가 길이)에 작용, 고저차는 (실제 길이)에만 작용
+                dP_fric_node = ((bb_result["f_tp"] * bb_result["rho_n"] * bb_result["v_m"]**2) / (2 * D_inner)) * (dL + Le_node)
+                dP_elev_node = bb_result["dP_dl_elev"] * dL
                 
-                # 총 압력 강하 (마찰 + 고저차 보정항) + 노드당 피팅 압력 강하
-                dP_dl_total = ((bb_result["dP_dl_fric"] + bb_result["dP_dl_elev"]) / (1 - bb_result["E_k"])) + (dP_fit_node / dL)
+                # 총 노드 압력 강하 (마찰 + 고저차 보정항)
+                dP_node_total = (dP_fric_node + dP_elev_node) / (1 - bb_result["E_k"])
+                dP_dl_total = dP_node_total / dL # 표출용 환산 (Pa/m)
+                
                 flow_regime = bb_result["flow_regime"]
                 
                 Re = bb_result.get("Re_n", 1e5)
@@ -303,7 +307,7 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
                 Pr = (Cp * mu_mix) / k_fluid if k_fluid > 0 else 1.0
                 
                 if i == 0:
-                    first_node_debug = {"상태": "2상 (2-Phase)", "Quality": Q, "Regime": flow_regime, "H_L": bb_result['H_L'], "k_pipe": k_pipe_current, "B&B_Multiplier(exp_S)": exp_S, "dP_fit(Pa)": dP_fit_node}
+                    first_node_debug = {"상태": "2상 (2-Phase)", "Quality": Q, "Regime": flow_regime, "H_L": bb_result['H_L'], "k_pipe": k_pipe_current, "Le_node(m)": Le_node, "B&B_Multiplier(exp_S)": bb_result["exp_S"]}
 
             U = calculate_heat_transfer(Re, Pr, k_fluid, D_inner, D_outer, k_pipe_current, k_ins_calc, t_ins_calc, h_ext)
             dT_dl = (U * math.pi * D_outer * ((T_amb_C + 273.15) - T_current_K)) / (mass_flow * Cp)
@@ -311,10 +315,10 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
             results.append({
                 "Node": i, "길이 (m)": i * dL, "압력 (bar)": P_current_Pa / 100000,
                 "온도 (°C)": T_current_C, "Phase": "2-Phase" if Q >= 0 else "1-Phase",
-                "Quality": Q if Q >= 0 else 0, "Regime": flow_regime, "dP/dL (Pa/m)": dP_dl_total, "k_pipe": k_pipe_current
+                "Quality": Q if Q >= 0 else 0, "Regime": flow_regime, "dP (Pa)": dP_node_total, "k_pipe": k_pipe_current
             })
             
-            P_current_Pa -= dP_dl_total * dL
+            P_current_Pa -= dP_node_total
             T_current_K += dT_dl * dL
             
             if P_current_Pa <= 10000:
