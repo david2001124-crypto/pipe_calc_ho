@@ -4,6 +4,7 @@ import numpy as np
 import math
 from CoolProp.CoolProp import PropsSI, PhaseSI, get_global_param_string
 import material_db
+
 # ---------------------------------------------------------
 # UI & Configuration Setup
 # ---------------------------------------------------------
@@ -153,11 +154,11 @@ col_p4, col_p5 = st.columns(2)
 D_inner = col_p4.number_input("배관 내부 직경 (m)", value=None, step=None, format="%.4f")
 thickness = col_p5.number_input("배관 두께 (m)", value=None, step=None, format="%.4f")
 
-material_keys = list(material_db.SHIPBUILDING_MAP.keys())
-selected_sys_material = st.selectbox("⚓ 선박 시스템 및 배관 강재 선택", [None] + material_keys)
+material_keys = list(material_db.MATERIAL_MAP.keys())
+selected_sys_material = st.selectbox("⚓ 배관 재질 매핑 (Material & Roughness)", [None] + material_keys)
 if selected_sys_material:
-    mat_info = material_db.SHIPBUILDING_MAP[selected_sys_material]
-    st.info(f"선택 반영: 절대 조도 **{mat_info['roughness_m']} m** | ASME 매핑: **{mat_info['asme_category']} - {mat_info['asme_grade']}**")
+    mat_info = material_db.MATERIAL_MAP[selected_sys_material]
+    st.info(f"선택 반영: 절대 조도 **{mat_info['roughness_m']} m** | {mat_info['asme_category']} - {mat_info['asme_grade']}")
 
 col_ins1, col_ins2 = st.columns(2)
 t_ins = col_ins1.number_input("보온재 두께 (m, 없으면 0)", value=None, step=None, format="%.4f")
@@ -204,7 +205,7 @@ if st.button("🚀 압력 강하 시뮬레이션 시작", type="primary", use_co
     else:
         elevation_angle = elev_val
 
-    mat_info = material_db.SHIPBUILDING_MAP[selected_sys_material]
+    mat_info = material_db.MATERIAL_MAP[selected_sys_material]
     roughness = mat_info["roughness_m"]
     asme_table = material_db.RAW_DB[mat_info["asme_category"]][mat_info["asme_grade"]]
     
