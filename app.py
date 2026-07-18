@@ -158,7 +158,12 @@ material_keys = list(material_db.MATERIAL_MAP.keys())
 selected_sys_material = st.selectbox("⚓ 배관 재질 매핑 (Material & Roughness)", [None] + material_keys)
 if selected_sys_material:
     mat_info = material_db.MATERIAL_MAP[selected_sys_material]
-    st.info(f"선택 반영: 절대 조도 **{mat_info['roughness_m']} m** | {mat_info['asme_category']} - {mat_info['asme_grade']}")
+    roughness_val = mat_info["roughness_m"]
+    
+    # 조도 표기법을 과학적 표기법(예: 4.50 x 10^-05)으로 변환
+    roughness_sci = f"{roughness_val:.2e}".replace("e", " x 10^")
+    
+    st.info(f"선택 반영: 절대 조도 **{roughness_sci} m** | {mat_info['asme_category']} - {mat_info['asme_grade']}")
 
 col_ins1, col_ins2 = st.columns(2)
 t_ins = col_ins1.number_input("보온재 두께 (m, 없으면 0)", value=None, step=None, format="%.4f")
