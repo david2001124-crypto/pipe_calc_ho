@@ -124,6 +124,7 @@ MATERIAL_MAP = {
         "asme_grade": "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27"
     }
 }
+}
 
 # ---------------------------------------------------------
 # FITTING & VALVE DATABASE (Equivalent Length L_e / D)
