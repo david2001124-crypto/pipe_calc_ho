@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import math
 from CoolProp.CoolProp import PropsSI, PhaseSI, get_global_param_string
-import material_heat transfer coefficient_DB
+import material_heat_transfer_coefficient_DB
 # ---------------------------------------------------------
 # UI & Configuration Setup
 # ---------------------------------------------------------
