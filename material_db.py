@@ -4,6 +4,7 @@ import numpy as np
 # RAW DATABASE (ASME BPVC Section II Part D - Table TCD)
 # ---------------------------------------------------------
 # 단위: Temp in °C, TC in W/(m·°C)
+# 제공된 원문 데이터를 바탕으로 TC(Thermal Conductivity) 값만 추출하여 구성했습니다.
 RAW_DB = {
     "Carbon and Low Alloy Steels": {
         "Material Group A [Note (1)]": {
@@ -14,12 +15,42 @@ RAW_DB = {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800],
             "k_W_mK": [47.3, 47.9, 48.0, 47.9, 47.6, 47.2, 46.7, 46.1, 45.5, 44.8, 44.2, 43.5, 42.9, 42.2, 41.5, 40.9, 40.2, 39.4, 38.6, 37.8, 36.9, 36.0, 35.0, 34.0, 33.0, 31.9, 30.8, 29.8, 28.8, 27.8, 26.9, 26.1]
         },
+        "Material Group C [Note (3)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [41.0, 40.8, 40.7, 40.6, 40.5, 40.4, 40.3, 40.1, 39.8, 39.5, 39.1, 38.7, 38.3, 37.8, 37.3, 36.8, 36.3, 35.8, 35.3, 34.8, 34.4, 33.9, 33.4, 32.8, 32.2, 31.6, 30.7, 29.1, 27.6, 26.7]
+        },
         "Material Group D [Note (4)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800],
             "k_W_mK": [36.3, 36.5, 36.7, 36.9, 37.0, 37.1, 37.2, 37.2, 37.2, 37.1, 36.9, 36.7, 36.5, 36.2, 35.8, 35.4, 35.0, 34.6, 34.2, 33.7, 33.3, 32.8, 32.4, 32.0, 31.5, 31.1, 30.6, 30.1, 28.7, 27.4, 26.8, 26.7]
+        },
+        "Material Group E [Note (5)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825],
+            "k_W_mK": [27.4, 28.4, 29.2, 29.8, 30.3, 30.8, 31.2, 31.5, 31.7, 31.9, 32.0, 32.1, 32.1, 32.0, 32.0, 31.9, 31.7, 31.6, 31.4, 31.2, 30.9, 30.7, 30.4, 30.1, 29.8, 29.4, 29.1, 28.6, 28.2, 27.6, 27.1, 26.9, 26.9]
+        },
+        "Ductile Cast Iron": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [22.3, 23.1, 23.8, 24.4, 25.0, 25.5, 25.9, 26.3, 26.6, 26.9, 27.2, 27.4, 27.5, 27.7, 27.8, 27.9, 27.9, 27.9, 27.9, 27.9, 27.9, 27.8, 27.7, 27.6, 27.5, 27.3, 27.2, 27.0, 26.8, 26.5]
+        }
+    },
+    "High Chrome Steels": {
+        "Material Group F [Note (6)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325],
+            "k_W_mK": [37.50, 38.50, 39.18, 39.73, 40.15, 40.45, 40.64, 40.73, 40.73, 40.64, 40.47, 40.23, 39.93]
+        },
+        "Material Group G [Note (7)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [24.6, 24.7, 24.7, 24.8, 24.9, 24.9, 25.0, 25.0, 25.1, 25.1, 25.2, 25.2, 25.2, 25.3, 25.3, 25.3, 25.4, 25.4, 25.4, 25.4, 25.5, 25.5, 25.5, 25.5, 25.5, 25.6, 25.6, 25.6, 25.6, 25.6]
         }
     },
     "High Alloy Steels": {
+        "Material Group H [Note (8)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [20.1, 20.2, 20.2, 20.3, 20.4, 20.5, 20.5, 20.6, 20.7, 20.8, 20.9, 21.0, 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 22.1, 22.2, 22.4, 22.5, 22.7, 22.9, 23.1, 23.3, 23.5]
+        },
+        "Material Group I [Note (9)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [17.3, 17.6, 18.0, 18.4, 18.9, 19.3, 19.8, 20.2, 20.7, 21.1, 21.5, 21.9, 22.2, 22.5, 22.8, 23.0, 23.3, 23.5, 23.6, 23.8, 23.9, 24.1, 24.2, 24.4, 24.5, 24.7, 24.9, 25.1, 25.4, 25.7]
+        },
         "Material Group J [Note (10)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
             "k_W_mK": [14.8, 15.3, 15.8, 16.2, 16.6, 17.0, 17.5, 17.9, 18.3, 18.6, 19.0, 19.4, 19.8, 20.1, 20.5, 20.8, 21.2, 21.5, 21.9, 22.2, 22.6, 22.9, 23.3, 23.6, 24.0, 24.3, 24.7, 25.0, 25.4, 25.7]
@@ -27,12 +58,26 @@ RAW_DB = {
         "Material Group K [Note (11)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
             "k_W_mK": [14.1, 14.6, 15.0, 15.4, 15.7, 16.1, 16.5, 16.8, 17.2, 17.6, 17.9, 18.3, 18.7, 19.0, 19.4, 19.7, 20.1, 20.5, 20.8, 21.2, 21.5, 21.9, 22.2, 22.6, 22.9, 23.2, 23.6, 23.9, 24.2, 24.6]
+        },
+        "Material Group L [Note (12)]": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
+            "k_W_mK": [11.1, 11.6, 12.0, 12.5, 12.9, 13.3, 13.8, 14.2, 14.6, 15.0, 15.5, 15.9, 16.3, 16.7, 17.1, 17.5, 18.0, 18.4, 18.8, 19.2, 19.6, 20.0, 20.4, 20.8, 21.2, 21.6, 22.0, 22.4, 22.8, 23.1]
+        }
+    },
+    "High Nickel Alloys": {
+        "Nickel N02200": {
+            "T_C": [100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525],
+            "k_W_mK": [66.8, 65.6, 64.3, 62.9, 61.7, 60.6, 59.4, 58.2, 57.0, 55.8, 54.9, 54.9, 55.7, 56.3, 56.7, 57.1, 57.6, 58.2]
+        },
+        "Ni-Cu N04400": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525],
+            "k_W_mK": [21.8, 22.7, 23.5, 24.3, 25.2, 26.1, 26.9, 27.7, 28.5, 29.2, 29.9, 30.6, 31.3, 32.0, 32.8, 33.5, 34.3, 35.1, 36.0, 36.8, 37.7]
         }
     },
     "Titanium Alloys": {
         "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 600, 650, 700, 750, 800, 900],
-            "k_W_mK": [22.0, 21.4, 21.1, 20.7, 20.5, 20.2, 20.0, 19.9, 19.7, 19.6, 19.5, 19.4, 19.4, 19.3, 19.3, 19.3, 19.4, 19.4, 19.5, 19.6, 19.7, 19.8, 22.2, 23.4, 24.5, 25.4, 26.1, 26.2]
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850, 875, 900],
+            "k_W_mK": [22.0, 21.4, 21.1, 20.7, 20.5, 20.2, 20.0, 19.9, 19.7, 19.6, 19.5, 19.4, 19.4, 19.3, 19.3, 19.3, 19.4, 19.4, 19.5, 19.6, 19.7, 19.8, 19.9, 20.4, 20.9, 21.4, 21.9, 22.4, 22.9, 23.3, 23.8, 24.3, 24.8, 25.2, 25.6, 25.9]
         }
     },
     "Aluminum Alloys": {
@@ -44,55 +89,81 @@ RAW_DB = {
 }
 
 # ---------------------------------------------------------
-# SHIPBUILDING SPECIFIC MAPPING
+# MATERIAL MAPPING (ASME Standard & Engineering ToolBox)
 # ---------------------------------------------------------
-SHIPBUILDING_MAP = {
-    "1. 기관실 일반 배관 - 탄소강 (FO, LO, FW, Steam 일반 라인)": {
-        "roughness_m": 0.000045,  # Commercial Steel
+MATERIAL_MAP = {
+    "탄소강 / ASME Material Group A / 0.000045m": {
+        "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group A [Note (1)]",
-        "desc": "연료유, 윤활유, 청수, 일반 스팀 라인용"
+        "desc": "일반 상업용 탄소강"
     },
-    "2. LPG 및 저온 유체 배관 - 저온 탄소강 (LPG 화물 배관, LTCS)": {
-        "roughness_m": 0.000045,  # Weld Steel
+    "저온 탄소강 / ASME Material Group B / 0.000045m": {
+        "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group B [Note (2)]",
-        "desc": "LPG 화물 배관 및 한랭지 운항용"
+        "desc": "LPG 및 한랭지 운항용"
     },
-    "3. LNG & 암모니아 연료 라인 - 스테인리스강 (SUS 316L)": {
-        "roughness_m": 0.0000035, # Bead blasted SS
+    "스테인리스강 (SUS 316L) / ASME Material Group K / 0.0000035m": {
+        "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group K [Note (11)]",
-        "desc": "LNG 연료 배관(-163°C), 액화 암모니아 라인"
+        "desc": "LNG 및 암모니아 라인용"
     },
-    "4. 일반 부식성 라인 - 스테인리스강 (SUS 304)": {
+    "스테인리스강 (SUS 304) / ASME Material Group J / 0.0000035m": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group J [Note (10)]",
-        "desc": "일반 부식 방지 라인"
+        "desc": "일반 부식 방지용"
     },
-    "5. 스크러버 및 화학 제품창 - 듀플렉스강 (Duplex SS)": {
+    "듀플렉스강 (Duplex SS) / ASME Material Group K / 0.0000035m": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group K [Note (11)]",
-        "desc": "스크러버 라인 및 케미컬 탱커 화물창"
+        "desc": "스크러버 및 화학 제품창"
     },
-    "6. LNG 독립형 연료 탱크 - 9% 니켈강 (9% Ni)": {
+    "9% 니켈강 (9% Ni) / ASME Material Group D / 0.000045m": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group D [Note (4)]",
-        "desc": "LNG 연료 탱크 (독립형 Type B/C) 부재"
+        "desc": "LNG 독립형 탱크 부재"
     },
-    "7. LNG 화물창 구조물 - 알루미늄 합금 (Al 5083)": {
-        "roughness_m": 0.0000015, # Smooth drawn
+    "알루미늄 합금 (Al 5083) / ASME A95083 / 0.0000015m": {
+        "roughness_m": 0.0000015,
         "asme_category": "Aluminum Alloys",
         "asme_grade": "A95083",
         "desc": "모스형 LNG 화물창 부재"
     },
-    "8. 해수 냉각 및 열교환 라인 - 티타늄 (Titanium Gr. 1/2)": {
+    "티타늄 (Titanium Gr. 1/2) / ASME Titanium Gr. 1~27 / 0.0000015m": {
         "roughness_m": 0.0000015,
         "asme_category": "Titanium Alloys",
         "asme_grade": "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27",
         "desc": "해수 냉각 배관 및 열교환기 플레이트"
     }
 }
+
+"""
+GENERAL NOTES:
+(a) TC is the thermal conductivity, W/(m·°C), and TD is the thermal diffusivity, 10−6 m2/sec:
+(b) Values of thermal conductivity and thermal diffusivity should be used with the understanding that there is an associated
+±10% uncertainty. This uncertainty results from compositional variations and variables associated with original
+data acquisition and analysis.
+
+NOTES:
+(1) Material Group A includes those materials listed as “Carbon steel” in the Nominal Composition column in Tables 1A,
+2A, 3, 5A, U, or Y-1.
+(2) Material Group B includes those materials listed as “C–Mn–Si–Cb,” “C–Mn–Si–V,” “C–Mn–Si–V–Cb,” “C–Mn–Ti,” or “C–
+Si–Ti” in the Nominal Composition column in Tables 1A, 2A, 3, 5A, U, or Y–1. 
+(3) Material Group C includes the following carbon–moly steels: C–1/4Mo, C–1/2Mo
+The following low chrome steels: 1/2Cr–1/5Mo–V... 
+(4) Material Group D includes the following low chrome steels: 21/4Cr–1Mo, 3Cr–1Mo... The following nickel steels: 5Ni–1/4Mo, 7Ni, 8Ni, 9Ni
+(5) Material Group E includes: 5Cr–1/2Mo, 5Cr–1/2Mo–Si, 5Cr–1/2Mo–Ti
+(6) Material Group F includes: 9Cr–1Mo
+(7) Material Group G includes: 12Cr, 12Cr–1Al, 13Cr, 13Cr–4Ni, 15Cr, 17Cr
+(8) Material Group H includes: 27Cr
+(9) Material Group I includes: 17Cr–4Ni–4Cu, 15Cr–5Ni–3Mo (only to 425°C)
+(10) Material Group J includes: 15Cr–6Ni–Cu–Mo, 18Cr–8Ni, 18Cr–8Ni–S (or Se), 18Cr–11Ni, 22Cr–2Ni–Mo–N, 23Cr–4Ni–Mo–Cu
+These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless steels.
+(11) Material Group K includes: 13Cr–8Ni–2Mo, 25Ni–15Cr–2Ti, 16Cr–12Ni–2Mo, 18Cr–5Ni–3Mo, 22Cr–5Ni–3Mo–N, 25Cr–7Ni–4Mo–N, 25Cr–20Ni
+(12) Material Group L includes: 14Cr–16Ni–6Si–Cu–Mo, 18Cr–18Ni–2Si, 25Cr–12Ni
+"""
