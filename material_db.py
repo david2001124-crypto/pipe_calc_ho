@@ -92,42 +92,33 @@ RAW_DB = {
 # MATERIAL MAPPING (ASME Standard & Engineering ToolBox)
 # ---------------------------------------------------------
 MATERIAL_MAP = {
-    "1. 기관실 일반 배관 - 탄소강 / ASME Material Group A": {
+    "탄소강 / ASME Material Group A": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
-        "asme_grade": "Material Group A [Note (1)]"
+        "asme_grade": "Material Group A [Note (1)]",
+        "desc": "일반 상업용 탄소강"
     },
-    "2. LPG 및 저온 유체 배관 - 저온 탄소강 / ASME Material Group B": {
+    "저온 탄소강 / ASME Material Group B": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
-        "asme_grade": "Material Group B [Note (2)]"
+        "asme_grade": "Material Group B [Note (2)]",
+        "desc": "LPG 및 한랭지 운항용"
     },
-    "3. LNG & 암모니아 연료 라인 - 스테인리스강 (SUS 316L) / ASME Material Group K": {
+    "스테인리스강 (SUS 316L) / ASME Material Group K": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
-        "asme_grade": "Material Group K [Note (11)]"
+        "asme_grade": "Material Group K [Note (11)]",
+        "desc": "LNG 및 암모니아 라인용"
     },
-    "4. 일반 부식성 라인 - 스테인리스강 (SUS 304) / ASME Material Group J": {
+    "스테인리스강 (SUS 304) / ASME Material Group J": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
-        "asme_grade": "Material Group J [Note (10)]"
-    },
-    "5. 스크러버 및 화학 제품창 - 듀플렉스강 (Duplex SS) / ASME Material Group K": {
-        "roughness_m": 0.0000035,
-        "asme_category": "High Alloy Steels",
-        "asme_grade": "Material Group K [Note (11)]"
-    },
-    "6. LNG 독립형 연료 탱크 - 9% 니켈강 (9% Ni) / ASME Material Group D": {
-        "roughness_m": 0.000045,
-        "asme_category": "Carbon and Low Alloy Steels",
-        "asme_grade": "Material Group D [Note (4)]"
-    },
-    "7. LNG 화물창 구조물 - 알루미늄 합금 (Al 5083) / Aluminum A95083": {
-        "roughness_m": 0.0000015,
-        "asme_category": "Aluminum Alloys",
-        "asme_grade": "A95083"
-    },
-    "8. 해수 냉각 및 열교환 라인 - 티타늄 (Titanium Gr. 1/2) / Titanium Alloys": {
+        "7. LNG 화물창 구조물 - 알루미늄 합금 (Al 5083)": {
+            "roughness_m": 0.0000015,
+            "asme_category": "Aluminum Alloys",
+            "asme_grade": "A95083"
+        },
+        "8. 해수 냉각 및 열교환 라인 - 티타늄 (Titanium Gr. 1/2)": {
         "roughness_m": 0.0000015,
         "asme_category": "Titanium Alloys",
         "asme_grade": "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27"
