@@ -92,49 +92,49 @@ RAW_DB = {
 # MATERIAL MAPPING (ASME Standard & Engineering ToolBox)
 # ---------------------------------------------------------
 MATERIAL_MAP = {
-    "탄소강 / ASME Material Group A / 0.000045m": {
+    "탄소강 / ASME Material Group A": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group A [Note (1)]",
         "desc": "일반 상업용 탄소강"
     },
-    "저온 탄소강 / ASME Material Group B / 0.000045m": {
+    "저온 탄소강 / ASME Material Group B": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group B [Note (2)]",
         "desc": "LPG 및 한랭지 운항용"
     },
-    "스테인리스강 (SUS 316L) / ASME Material Group K / 0.0000035m": {
+    "스테인리스강 (SUS 316L) / ASME Material Group K": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group K [Note (11)]",
         "desc": "LNG 및 암모니아 라인용"
     },
-    "스테인리스강 (SUS 304) / ASME Material Group J / 0.0000035m": {
+    "스테인리스강 (SUS 304) / ASME Material Group J": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group J [Note (10)]",
         "desc": "일반 부식 방지용"
     },
-    "듀플렉스강 (Duplex SS) / ASME Material Group K / 0.0000035m": {
+    "듀플렉스강 (Duplex SS) / ASME Material Group K": {
         "roughness_m": 0.0000035,
         "asme_category": "High Alloy Steels",
         "asme_grade": "Material Group K [Note (11)]",
         "desc": "스크러버 및 화학 제품창"
     },
-    "9% 니켈강 (9% Ni) / ASME Material Group D / 0.000045m": {
+    "9% 니켈강 (9% Ni) / ASME Material Group D": {
         "roughness_m": 0.000045,
         "asme_category": "Carbon and Low Alloy Steels",
         "asme_grade": "Material Group D [Note (4)]",
         "desc": "LNG 독립형 탱크 부재"
     },
-    "알루미늄 합금 (Al 5083) / ASME A95083 / 0.0000015m": {
+    "알루미늄 합금 (Al 5083) / ASME A95083": {
         "roughness_m": 0.0000015,
         "asme_category": "Aluminum Alloys",
         "asme_grade": "A95083",
         "desc": "모스형 LNG 화물창 부재"
     },
-    "티타늄 (Titanium Gr. 1/2) / ASME Titanium Gr. 1~27 / 0.0000015m": {
+    "티타늄 (Titanium Gr. 1/2) / ASME Titanium Gr. 1~27": {
         "roughness_m": 0.0000015,
         "asme_category": "Titanium Alloys",
         "asme_grade": "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27",
@@ -148,22 +148,127 @@ GENERAL NOTES:
 (b) Values of thermal conductivity and thermal diffusivity should be used with the understanding that there is an associated
 ±10% uncertainty. This uncertainty results from compositional variations and variables associated with original
 data acquisition and analysis.
-
 NOTES:
 (1) Material Group A includes those materials listed as “Carbon steel” in the Nominal Composition column in Tables 1A,
 2A, 3, 5A, U, or Y-1.
 (2) Material Group B includes those materials listed as “C–Mn–Si–Cb,” “C–Mn–Si–V,” “C–Mn–Si–V–Cb,” “C–Mn–Ti,” or “C–
-Si–Ti” in the Nominal Composition column in Tables 1A, 2A, 3, 5A, U, or Y–1. 
-(3) Material Group C includes the following carbon–moly steels: C–1/4Mo, C–1/2Mo
-The following low chrome steels: 1/2Cr–1/5Mo–V... 
-(4) Material Group D includes the following low chrome steels: 21/4Cr–1Mo, 3Cr–1Mo... The following nickel steels: 5Ni–1/4Mo, 7Ni, 8Ni, 9Ni
-(5) Material Group E includes: 5Cr–1/2Mo, 5Cr–1/2Mo–Si, 5Cr–1/2Mo–Ti
-(6) Material Group F includes: 9Cr–1Mo
-(7) Material Group G includes: 12Cr, 12Cr–1Al, 13Cr, 13Cr–4Ni, 15Cr, 17Cr
-(8) Material Group H includes: 27Cr
-(9) Material Group I includes: 17Cr–4Ni–4Cu, 15Cr–5Ni–3Mo (only to 425°C)
-(10) Material Group J includes: 15Cr–6Ni–Cu–Mo, 18Cr–8Ni, 18Cr–8Ni–S (or Se), 18Cr–11Ni, 22Cr–2Ni–Mo–N, 23Cr–4Ni–Mo–Cu
-These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless steels.
-(11) Material Group K includes: 13Cr–8Ni–2Mo, 25Ni–15Cr–2Ti, 16Cr–12Ni–2Mo, 18Cr–5Ni–3Mo, 22Cr–5Ni–3Mo–N, 25Cr–7Ni–4Mo–N, 25Cr–20Ni
-(12) Material Group L includes: 14Cr–16Ni–6Si–Cu–Mo, 18Cr–18Ni–2Si, 25Cr–12Ni
+Si–Ti” in the Nominal Composition column in Tables 1A, 2A, 3, 5A, U, or Y–1. Also includes:
+3/4Cr–1/2Ni–Cu
+1Cr–1/2Mo–Si
+3/4Ni–1/2Cu–Mo
+21/2Ni
+(3) Material Group C includes the following carbon–moly steels:
+C–1/4Mo C–1/2Mo
+The following low chrome steels:
+1/2Cr–1/5Mo–V
+1/2Cr–1/4Mo–Si
+1/2Cr–1/2Mo
+1/2Cr–1/2Ni–1/5Mo
+3/4Cr–3/4Ni–Cu–Al
+1Cr–1Mn–1/4Mo
+1Cr–1/5Mo
+1Cr–1/2Mo
+11/4Cr–1/2Mo
+11/4Cr–1/2Mo–Si
+13/4Cr–1/2Mo–Cu
+13/4Cr–1/2Mo–Ti
+2Cr–1/2Mo
+The following manganese steels:
+Mn–1/2Mo
+Mn–1/2Mo–1/4Ni
+Mn–1/2Mo–1/2Ni
+Mn–1/2Mo–3/4Ni
+Mn–1/2Ni–V
+Mn–V
+The following nickel steels:
+1/2Ni–1/2Cr–1/4Mo–V
+1/2Ni–1/2Mo–V
+3/4Ni–1/2Cr–1/2Mo–V
+3/4Ni–1/2Mo–1/3Cr–V
+3/4Ni–1/2Mo–Cr–V
+3/4Ni–1Mo–3/4Cr
+1Ni–1/2Cr–1/2Mo
+11/4Ni–1Cr–1/2Mo
+31/2Ni–13/4Cr–1/2Mo–V
+4Ni–11/2Cr–1/2Mo–V
+(4) Material Group D includes the following low chrome steels:
+21/4Cr–1Mo
+3Cr–1Mo
+3Cr–1Mo–1/4V–Cb–Ca
+3Cr–1Mo–1/4V–Ti–B
+The following manganese steel:
+Mn–1/4Mo
+The following nickel steels:
+13/4Ni–3/4Cr–1/4Mo
+2Ni–3/4Cr–1/4Mo
+2Ni–3/4Cr–1/3Mo
+2Ni–11/2Cr–1/4Mo–V
+2Ni–1Cu
+23/4Ni–11/2Cr–1/2Mo–V
+5Ni–1/4Mo
+7Ni
+8Ni
+9Ni
+(5) Material Group E includes:
+5Cr–1/2Mo
+5Cr–1/2Mo–Si
+5Cr–1/2Mo–Ti
+(6) Material Group F includes:
+9Cr–1Mo
+(7) Material Group G includes:
+12Cr
+12Cr–1Al
+13Cr
+13Cr–4Ni
+15Cr
+17Cr
+(8) Material Group H includes:
+27Cr
+(9) Material Group I includes:
+17Cr–4Ni–4Cu 15Cr–5Ni–3Mo (only to 425°C)
+NOTES (CONT'D):
+(10) Material Group J includes:
+15Cr–6Ni–Cu–Mo (only to 425°C)
+17Cr–7Ni–1Al (only to 425°C)
+18Cr–8Ni
+18Cr–8Ni–S (or Se)
+18Cr–11Ni
+22Cr–2Ni–Mo–N
+23Cr–4Ni–Mo–Cu
+These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless
+steels.
+(11) Material Group K includes:
+13Cr–8Ni–2Mo (only to 425°C)
+29Cr–7Ni–2Mo–N
+25Ni–15Cr–2Ti
+29Ni–20Cr–3Cu–2Mo
+16Cr–12Ni–2Mo
+18Cr–5Ni–3Mo
+18Cr–10Ni–Cb
+18Cr–10Ni–Ti
+18Cr–13Ni–3Mo
+18Cr–15Ni–4Si
+19Cr–9Ni–Mo–W
+21Cr–11Ni–N
+22Cr–5Ni–3Mo–N
+23Cr–12Ni
+25Cr–6Ni–Mo–N
+25Cr–7Ni–4Mo–N
+25Cr–20Ni
+25Cr–20Ni–2Mo
+44Fe–25Ni–21Cr–Mo
+These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless
+steels.
+(12) Material Group L includes:
+14Cr–16Ni–6Si–Cu–Mo
+18Cr–18Ni–2Si
+18Cr–20Ni–5.5Si
+22Cr–13Ni–5Mn
+24Cr–22Ni–7.5Mo
+24Cr–22Ni–6Mo–2W–Cu–N
+25Cr–12Ni
+25Cr–35Ni–N–Ce
+31Ni–31Fe–29Cr–Mo
+These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless
+steels.
 """
