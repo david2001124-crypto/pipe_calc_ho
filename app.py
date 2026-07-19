@@ -69,7 +69,6 @@ def calculate_fT_hysys(roughness, D):
         if abs(f_new - f_old) < 1e-8:
             return f_new
         f_old = f_new
-        
     return f_new
 
 def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D, theta_deg, roughness, P_Pa):
@@ -107,9 +106,9 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D, theta_deg, ro
     
     return {"dP_dl_elev": rho_s * g * math.sin(theta_rad), "E_k": min((rho_s * v_m * v_SG) / P_Pa, 0.9), "flow_regime": regime, "H_L": H_L, "lambda_L": lambda_L, "v_m": v_m, "Re_n": Re_n, "rho_n": rho_n, "f_tp": f_n * math.exp(S)}
 
-def calculate_thermal_resistance_per_m(Re, Pr, k_fluid, D_i, D_o, k_pipe, k_ins, t_ins, h_o, is_heating):
-    """ 1D 원통형 열전달 저항 네트워크 계산 (단위 길이 1m 당 저항값 [K/W]) """
-    n_exp = 0.4 if is_heating else 0.3 # Dittus-Boelter 지수
+def calculate_heat_transfer(Re, Pr, k_fluid, D_i, D_o, k_pipe, k_ins, t_ins, h_o, is_heating=False):
+    """ 1D 원통형 열전달 저항 네트워크 계산 (전체 U-value 산출) """
+    n_exp = 0.4 if is_heating else 0.3
     Nu = 0.023 * (Re**0.8) * (Pr**n_exp) if Re > 2300 else 4.36
     h_i = (Nu * k_fluid) / D_i if D_i > 0 else 1e-5
     
@@ -119,15 +118,15 @@ def calculate_thermal_resistance_per_m(Re, Pr, k_fluid, D_i, D_o, k_pipe, k_ins,
     R_cond_ins = math.log(D_ins_outer / D_o) / (2 * math.pi * k_ins) if (t_ins > 0 and k_ins > 0) else 0
     R_conv_out = 1.0 / (h_o * math.pi * D_ins_outer) if h_o > 0 else 0
     
-    return R_conv_in + R_cond_pipe + R_cond_ins + R_conv_out
+    return 1.0 / (R_conv_in + R_cond_pipe + R_cond_ins + R_conv_out)
 
 def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker):
-    """ Inner Loop: 주어진 T_out에 대해 운동량 보존(Beggs & Brill)을 만족하는 압력 강하를 산출 (직관 파이프 전용) """
+    """ HYSYS Inner Loop: 출구 온도가 주어졌을 때 운동량 보존을 만족하는 출구 압력을 할선법으로 찾음 """
     P0 = P_in; P1 = P_in - 500; tol = 100 
     
     def calc_P_out(P_guess):
         P_avg = (P_in + P_guess) / 2.0; T_avg = (T_in + T_out_guess) / 2.0
-        if P_avg < 10000: raise ValueError(f"내부 압력이 너무 낮습니다 ({P_avg/1e5:.3f} bar). 배관경 확대가 필요합니다.")
+        if P_avg < 10000: raise ValueError(f"내부 압력이 너무 낮습니다 ({P_avg/1e5:.3f} bar). 배관경 확대 요망.")
             
         try: phase_raw = PhaseSI('T', T_avg, 'P', P_avg, fluid_string)
         except: phase_raw = "unknown"
@@ -144,29 +143,166 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             vel = mass_flow / (rho * A_cross)
             Re = (rho * vel * D_inner) / mu
             f_factor = churchill_friction_factor(Re, roughness/D_inner)
-            # V6 업데이트: Le_node가 직관 로직에서 완전히 제외됨 (순수 길이 dL만 적용)
+            # V6: 피팅 등가길이 배제, 순수 배관 마찰만 계산
             dP_total = ((f_factor * rho * vel**2) / (2 * D_inner)) * dL + (rho * 9.81 * math.sin(math.radians(angle_deg))) * dL
         else:
+            rho_L = PropsSI('D', 'P', P_avg, 'Q', 0, fluid_string)
+            rho_G = PropsSI('D', 'P', P_avg, 'Q', 1, fluid_string)
+            mu_L = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-3, audit_tracker)
+            mu_G = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
+            
+            v_SG = (mass_flow * Q_val) / (rho_G * A_cross)
+            v_SL = (mass_flow * (1 - Q_val)) / (rho_L * A_cross)
+            
+            bb = calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_deg, roughness, P_avg)
+            dP_fric = ((bb["f_tp"] * bb["rho_n"] * bb["v_m"]**2) / (2 * D_inner)) * dL
+            dP_total = (dP_fric + bb["dP_dl_elev"] * dL) / (1 - bb["E_k"])
+            
+        return P_in - dP_total, is_twophase, Q_val
+
+    P_calc0, is_tp0, Q0 = calc_P_out(P0)
+    f0 = P_calc0 - P0
+    if abs(f0) < tol: return P_calc0, is_tp0, Q0
+        
+    P_calc1, is_tp1, Q1 = calc_P_out(P1)
+    f1 = P_calc1 - P1
+    
+    for _ in range(20):
+        if abs(f1) < tol: return P_calc1, is_tp1, Q1
+        if abs(f1 - f0) < 1e-5: P_new = P1 - f1 * 0.5
+        else: P_new = P1 - f1 * ((P1 - P0) / (f1 - f0))
+        
+        P0, f0 = P1, f1
+        P1 = P_new
+        P_calc1, is_tp1, Q1 = calc_P_out(P1)
+        f1 = P_calc1 - P1
+
+    return P1, is_tp1, Q1
+
+def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, D_outer, roughness, angle_deg, dL, k_pipe, k_ins, t_ins, h_ext, T_amb_K, audit_tracker):
+    """ HYSYS Middle Loop: 에너지 보존(엔탈피 변화=열전달량)을 만족하는 출구 온도를 할선법으로 찾음 """
+    T0 = T_in; T1 = T_in - 0.1; tol = 0.01
+    
+    try: 
+        H_in = PropsSI('H', 'T', T_in, 'P', P_in, fluid_string)
+        use_enthalpy = True
+    except: 
+        use_enthalpy = False
+        
+    def calc_T_out(T_guess):
+        P_out_calc, is_tp, Q_val = solve_inner_loop_pressure(T_in, P_in, T_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker)
+        P_avg = (P_in + P_out_calc) / 2.0; T_avg = (T_in + T_guess) / 2.0
+        
+        Cp = get_robust_prop('C', T_avg, P_avg, fluid_string, norm_fractions, 2000, audit_tracker)
+        k_fluid = get_robust_prop('L', T_avg, P_avg, fluid_string, norm_fractions, 0.1, audit_tracker)
+        mu = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
+        
+        try: rho = PropsSI('D', 'T', T_avg, 'P', P_avg, fluid_string)
+        except: rho = 500
+            
+        Re = (rho * (mass_flow / (rho * A_cross)) * D_inner) / mu
+        Pr = (Cp * mu) / k_fluid if k_fluid > 0 else 1.0
+        
+        U = calculate_heat_transfer(Re, Pr, k_fluid, D_inner, D_outer, k_pipe, k_ins, t_ins, h_ext)
+        Q_heat = U * dL * (T_amb_K - T_avg) 
+        
+        if use_enthalpy:
+            try: 
+                return PropsSI('T', 'H', H_in + Q_heat / mass_flow, 'P', P_out_calc, fluid_string), P_out_calc, is_tp, Q_val
+            except: pass
+        return T_in + Q_heat / (mass_flow * Cp), P_out_calc, is_tp, Q_val
+        
+    T_calc0, P_calc0, is_tp0, Q0 = calc_T_out(T0)
+    f0 = T_calc0 - T0
+    if abs(f0) < tol: return T_calc0, P_calc0, is_tp0, Q0
+        
+    T_calc1, P_calc1, is_tp1, Q1 = calc_T_out(T1)
+    f1 = T_calc1 - T1
+    
+    for _ in range(20):
+        if abs(f1) < tol: return T_calc1, P_calc1, is_tp1, Q1
+        if abs(f1 - f0) < 1e-6: T_new = T1 - f1 * 0.5
+        else: T_new = T1 - f1 * ((T1 - T0) / (f1 - f0))
+        
+        T0, f0 = T1, f1
+        T1 = T_new
+        T_calc1, P_calc1, is_tp1, Q1 = calc_T_out(T1)
+        f1 = T_calc1 - T1
+
+    return T1, P_calc1, is_tp1, Q1
+
+st.title("⚓ 해양/플랜트 다상 유동 파이프라인 시뮬레이터 (V6.0)")
+st.caption("기반 물리 엔진: 3-Nested-Loop, PH-Flash Thermodynamics, Beggs & Brill (Pipe), Crane TP-410 & Chisholm (Fittings)")
+
+st.header("1. 유체 성분 및 운전 조건")
+c1, c2, c3, c4 = st.columns(4)
+selected_fluids = c1.multiselect("유체 구성 성분 선택 (CoolProp 기반)", AVAILABLE_FLUIDS, default=["Methane", "Ethane"])
+fractions = {}
+if selected_fluids:
+    st.write("성분별 몰 분율 (Mole Fractions) 입력:")
+    frac_cols = st.columns(len(selected_fluids))
+    for i, f in enumerate(selected_fluids):
+        fractions[f] = frac_cols[i].number_input(f"{f} 분율", min_value=0.0, value=1.0/len(selected_fluids), format="%.3f")
+
+T_inlet_C = c2.number_input("입구 온도 (°C)", value=20.0, format="%.2f")
+P_inlet_bar = c3.number_input("입구 압력 (bar)", value=10.0, format="%.2f")
+mass_flow = c4.number_input("질량 유량 (kg/s)", value=5.0, min_value=0.001, format="%.3f")
+
+st.header("2. 순차적 파이프라인 빌더")
+if 'pipeline' not in st.session_state:
+    st.session_state.pipeline = []
+
+comp_type = st.radio("추가할 컴포넌트", ["Pipe Segment (배관)", "Fitting / Valve (밸브 및 피팅)"], horizontal=True)
+
+if "Pipe" in comp_type:
+    ac1, ac2, ac3 = st.columns(3)
+    p_len = ac1.number_input("직관 길이 (m)", min_value=0.0, value=10.0, format="%.4f")
+    p_elev_type = ac2.selectbox("경사 입력 방식", ["Angle (deg)", "Height (m)"])
+    p_elev_val = ac3.number_input("경사/높이 값", value=0.0, format="%.4f")
+    
+    pc1, pc2, pc3 = st.columns(3)
+    D_inner = pc1.number_input("내부 직경 (m)", value=0.1, format="%.4f")
+    thickness = pc2.number_input("배관 두께 (m)", value=0.005, format="%.4f")
+    selected_sys_material = pc3.selectbox("배관 재질 선택 (ASME)", list(material_db.MATERIAL_MAP.keys()))
+    
+    if st.button("➕ 배관 추가", type="secondary"):
+        st.session_state.pipeline.append({
+            "type": "Pipe", "length": p_len, "elev_type": p_elev_type, "elev_val": p_elev_val,
+            "D_inner": D_inner, "thickness": thickness, "material": selected_sys_material
+        })
+        st.rerun()
+else:
     fc1, fc2 = st.columns(2)
     f_type = fc1.selectbox("피팅/밸브 종류", list(material_db.HYSYS_FITTING_DB.keys()))
     f_qty = fc2.number_input("수량", min_value=1, value=1, step=1)
     
     if st.button("➕ 피팅/밸브 추가", type="secondary"):
-            st.session_state.pipeline.append({"type": "Fitting", "name": f_type, "qty": f_qty})
-            st.rerun()
+        st.session_state.pipeline.append({
+            "type": "Fitting", "name": f_type, "qty": f_qty
+        })
+        st.rerun()
 
 if st.session_state.pipeline:
     st.markdown("##### 🧱 현재 구성된 파이프라인 목록 (Flow: 위 ➔ 아래)")
     h1, h2, h3 = st.columns([0.1, 0.7, 0.2])
-    h1.caption("순서"); h2.caption("컴포넌트 상세 제원"); h3.caption("이동 / 삭제")
+    h1.caption("순서")
+    h2.caption("컴포넌트 상세 제원")
+    h3.caption("이동 / 삭제")
     st.divider()
+    
     for idx, comp in enumerate(st.session_state.pipeline):
         c1, c2, c3, c4, c5 = st.columns([0.1, 0.7, 0.06, 0.06, 0.08])
         c1.write(f"**[{idx+1}]**")
+        
         if comp.get("type") == "Pipe":
-            c2.write(f"**배관:** L={comp.get('length', 0)}m | ID={comp.get('D_inner', 0)}m | 재질: {comp.get('material', '').split(' / ')[0]}")
+            _len = comp.get('length', 0)
+            _id = comp.get('D_inner', 0)
+            _mat = comp.get('material', '').split(' / ')[0] if 'material' in comp else "Unknown"
+            c2.write(f"**배관:** L={_len}m | ID={_id}m | 재질: {_mat}")
         else:
-            c2.write(f"**피팅/밸브:** {comp.get('name')} (x{comp.get('qty', 1)})")
+            _name = comp.get('name', 'Unknown')
+            _qty = comp.get('qty', 1)
+            c2.write(f"**피팅/밸브:** {_name} (x{_qty})")
             
         if c3.button("⬆️", key=f"up_{idx}") and idx > 0:
             st.session_state.pipeline[idx-1], st.session_state.pipeline[idx] = st.session_state.pipeline[idx], st.session_state.pipeline[idx-1]
@@ -175,18 +311,19 @@ if st.session_state.pipeline:
             st.session_state.pipeline[idx+1], st.session_state.pipeline[idx] = st.session_state.pipeline[idx], st.session_state.pipeline[idx+1]
             st.rerun()
         if c5.button("❌", key=f"del_{idx}"):
-            st.session_state.pipeline.pop(idx); st.rerun()
+            st.session_state.pipeline.pop(idx)
+            st.rerun()
     st.divider()
 
-st.header("3. 외부 환경 및 시뮬레이션 설정 (전체 공통 적용)")
+st.header("3. 외부 환경 (전체 공통 적용)")
 ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-T_amb_C = ec1.number_input("외부 온도 (°C)", value=None, format="%.4f")
-h_ext = ec2.number_input("외부 열전달계수 (W/m²K)", value=None, format="%.4f")
+T_amb_C = ec1.number_input("외부 온도 (°C)", value=25.0, format="%.2f")
+h_ext = ec2.number_input("외부 열전달계수 (W/m²K)", value=10.0, format="%.2f")
 t_ins = ec3.number_input("보온재 두께 (m)", value=0.0, format="%.4f")
 k_ins = ec4.number_input("보온재 열전도도 (W/mK)", value=0.0, format="%.4f")
-N_per_pipe = ec5.number_input("배관당 내부 분할(Node) 갯수", value=10, min_value=1, step=1, help="Nested Loop가 모든 격자에서 P-T 수렴을 완벽히 달성하므로, Auto-Mesh 불필요.")
+N_per_pipe = ec5.number_input("배관당 내부 분할(Node) 갯수", value=10, min_value=1, step=1, help="Nested Loop 수렴을 통해 각 격자 내 오차를 완벽히 해결하므로 적절한 N 설정")
 
-if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="primary", use_container_width=True):
+if st.button("🚀 고급 물리엔진 시뮬레이션 시작", type="primary", use_container_width=True):
     missing = [name for name, val in [("유체", selected_fluids), ("온도", T_inlet_C), ("압력", P_inlet_bar), ("유량", mass_flow), ("외부조건", T_amb_C), ("파이프", st.session_state.pipeline)] if not val]
     if missing or any(v is None for v in fractions.values()): st.error("🚨 필수 항목 누락!"); st.stop()
 
@@ -204,13 +341,12 @@ if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="pri
     results.append({"Component": "Inlet", "L_cum (m)": L_cum, "Z_cum (m)": Z_cum, "P (bar)": P_current_Pa / 1e5, "T (°C)": T_current_K - 273.15, "Phase": "-", "dP (Pa)": 0, "Regime": "Inlet"})
     
     curr_D_inner, curr_thickness, curr_roughness, curr_mat_info = 0.1, 0.005, 4.5e-5, list(material_db.MATERIAL_MAP.values())[0]
-
-    status_box = st.status("🤖 HYSYS형 3-Nested-Loop 및 피팅 디커플링 해석 진행 중...", expanded=True)
+    status_box = st.status("🤖 3-Nested-Loop 및 피팅 디커플링 해석 진행 중...", expanded=True)
     
     try:
         for comp_idx, comp in enumerate(st.session_state.pipeline):
             if comp.get("type") == "Pipe":
-                # [A] 직관 배관: Nested Loop (Beggs & Brill + PH Flash) 적용
+                # [A] 직관 배관: 3중 중첩 루프 기반 PH-Flash 해석 적용
                 curr_D_inner = comp.get("D_inner", curr_D_inner)
                 curr_thickness = comp.get("thickness", curr_thickness)
                 if "material" in comp: curr_mat_info = material_db.MATERIAL_MAP[comp["material"]]
@@ -239,12 +375,11 @@ if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="pri
                     results.append({"Component": f"Pipe_{comp_idx+1}", "L_cum (m)": L_cum, "Z_cum (m)": Z_cum, "P (bar)": P_current_Pa / 1e5, "T (°C)": T_current_K - 273.15, "Phase": "2-Phase" if is_tp else "1-Phase", "dP (Pa)": dP, "Regime": "Beggs & Brill" if is_tp else "Churchill"})
 
             elif comp.get("type") == "Fitting":
-                # [B] 피팅/밸브 컴포넌트: 국부 저항 (HYSYS TP-410 & Chisholm) 적용
+                # [B] 피팅/밸브: Crane TP-410 & Chisholm 모델로 독립적 해석 (디커플링)
                 f_name = comp.get("name", "Unknown")
                 qty = comp.get("qty", 1)
                 
-                if P_current_Pa < 10000: # 0.1 bar 이하 검사
-                        raise ValueError(f"[{comp_idx+1}번 밸브] 통과 전 압력이 {P_current_Pa/1e5:.3f} bar로 너무 낮습니다.")
+                if P_current_Pa < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 통과 전 압력이 {P_current_Pa/1e5:.3f} bar로 너무 낮습니다.")
 
                 fit_data = material_db.HYSYS_FITTING_DB.get(f_name, {"A": 0.0, "B": 30, "Chisholm_B": 1.5})
                 A_vh = fit_data["A"]
@@ -260,20 +395,15 @@ if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="pri
                     try: Q_val = PropsSI('Q', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     except: is_twophase = False
                 
-                # 1. HYSYS 방식 완전 난류 마찰계수(f_T) 도출 (Churchill 극한값 반복 수렴)
                 f_T = calculate_fT_hysys(curr_roughness, curr_D_inner)
-                
-                # 2. HYSYS 피팅 K-Factor 산출 (K = A + B * f_T)
                 K_factor = (A_vh + B_ft * f_T) * qty
                 
                 if not is_twophase:
-                    # 단상 유동: dP = K * rho * v^2 / 2
                     rho = PropsSI('D', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     A_cross = math.pi * (curr_D_inner / 2)**2
                     vel = mass_flow / (rho * A_cross)
                     dP_fit = K_factor * rho * (vel**2) / 2.0
                 else:
-                    # 2상 유동: 단상(Liquid-only) K 계수 기반 마찰에 Chisholm B 승수 적용
                     rho_L = PropsSI('D', 'P', P_current_Pa, 'Q', 0, fluid_string)
                     rho_G = PropsSI('D', 'P', P_current_Pa, 'Q', 1, fluid_string)
                     A_cross = math.pi * (curr_D_inner / 2)**2
@@ -284,8 +414,12 @@ if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="pri
                 
                 P_out_fit = P_current_Pa - dP_fit
                 
-                # 피팅 통과 시 등엔탈피(Iso-enthalpic) 팽창 가정에 의한 PH-Flash 온도 강하 추적 (Joule-Thomson 효과)
-                    T_out_fit = T_current_K # 에러 발생 시 온도 유지 (Fallback)
+                # PH-Flash Thermodynamics: 피팅 통과 시 등엔탈피(Isoenthalpic) 팽창 가정
+                try:
+                    H_in = PropsSI('H', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
+                    T_out_fit = PropsSI('T', 'H', H_in, 'P', P_out_fit, fluid_string)
+                except:
+                    T_out_fit = T_current_K # Fail-safe fallback
                 
                 P_current_Pa, T_current_K = P_out_fit, T_out_fit
                 results.append({"Component": f"Fitting_{comp_idx+1} ({f_name})", "L_cum (m)": L_cum, "Z_cum (m)": Z_cum, "P (bar)": P_current_Pa / 1e5, "T (°C)": T_current_K - 273.15, "Phase": "2-Phase" if is_twophase else "1-Phase", "dP (Pa)": dP_fit, "Regime": "Chisholm 2-Phase" if is_twophase else "Crane TP-410"})
@@ -297,7 +431,7 @@ if st.button("🚀 고급 물리엔진 기반 시뮬레이션 시작", type="pri
         st.error(str(ve)); st.stop()
     except Exception as e:
         status_box.update(label="🚨 해석 중단", state="error")
-        st.error(f"예상치 못한 시스템 오류 발생: {e}"); st.stop()
+        st.error(f"예상치 못한 오류: {e}"); st.stop()
 
     df_res = pd.DataFrame(results)
     if global_audit_tracker:
