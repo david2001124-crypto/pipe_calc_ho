@@ -83,21 +83,30 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     
     # 내부 헬퍼 함수: 특정 유동 양식에 대한 수평 홀드업 및 경사 보정계수 도출
     def get_holdup_and_C(reg_type):
+        # 1. 수평 홀드업 계산 (a, b, c는 상향/하향 무관하게 유동 양식에 따라 동일)
         if reg_type == "Segregated":
             a, b, c = 0.98, 0.4846, 0.0868
-            d, e, f, g = 0.011, -3.768, 3.539, -1.614
         elif reg_type == "Intermittent":
             a, b, c = 0.845, 0.5351, 0.0173
-            d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
         else: # Distributed
             a, b, c = 1.065, 0.5824, 0.0609
-            d, e, f, g = 0, 0, 0, 0 # Distributed는 경사 보정이 없음
             
-        # 수평 홀드업 계산 (N_Fr로 '나누는' 것이 Original 수식)
         H_L_0 = (a * lambda_L**b) / (N_Fr**c)
         H_L_0 = min(max(H_L_0, lambda_L), 1.0) # 물리적 한계치 방어
         
-        # 경사 보정계수 (C) 계산
+        # 2. 경사 보정계수 (C) 상수 결정 (Uphill vs Downhill 완벽 분리)
+        if angle_deg >= 0: # Uphill (상향 유동 및 수평)
+            if reg_type == "Segregated":
+                d, e, f, g = 0.011, -3.768, 3.539, -1.614
+            elif reg_type == "Intermittent":
+                d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
+            else: # Distributed (분산형은 상향에서 경사 보정 없음)
+                d, e, f, g = 0, 0, 0, 0 
+        else: # Downhill (하향 유동)
+            # Beggs & Brill (1973): 하향 유동은 모든 유동 양식(All Flow Regimes)에 대해 동일한 보정 계수 적용
+            d, e, f, g = 4.70, -0.3692, 0.1244, -0.5056
+            
+        # 경사 보정계수 수식 계산 (d=0 이면 즉시 0 반환하여 log 에러 원천 차단)
         if d == 0: C_val = 0
         else: C_val = (1 - lambda_L) * math.log(max(d * (lambda_L**e) * (N_VL**f) * (N_Fr**g), 1e-5))
         
