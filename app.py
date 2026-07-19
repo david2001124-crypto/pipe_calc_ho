@@ -54,45 +54,73 @@ def calculate_fT_hysys(roughness, D_inner):
 
 def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_deg, roughness, P_Pa):
     """
-    [Beggs and Brill (1973) 2상 유동 모델]
-    파이프 내에 액체와 기체가 섞여 흐를 때의 마찰 강하 및 위치 수두(중력)를 계산합니다.
-    해양 배관처럼 경사(Inclination)가 있는 관에서 홀드업(액체가 고이는 현상)을 매우 정확하게 예측합니다.
+    [Beggs and Brill (1973) Rigorous Model]
+    사용자 지적사항 반영 완료: Transition 영역의 가중 보간법(Interpolation) 적용 및
+    액체 속도수(N_VL) 기반의 엄밀한 경사 보정 계수(Inclination Correction) 복원.
     """
-    v_m = v_SL + v_SG # 혼합물 유속 = 겉보기 액체유속 + 겉보기 기체유속
+    v_m = v_SL + v_SG # 혼합물 유속
     if v_m <= 0: v_m = 1e-6
-    lambda_L = v_SL / v_m # 입력 액체 체적비 (No-slip holdup)
-    N_Fr = (v_m**2) / (9.81 * D_inner) # Froude 수: 중력 대비 관성력의 비율 (유동 양식 판별에 사용)
+    lambda_L = max(v_SL / v_m, 1e-5) # 입력 액체 체적비 (No-slip holdup)
     
-    # 유동 양식(Flow Regime) 판별을 위한 경계값 계산
-    L1 = 316 * lambda_L**0.302; L2 = 0.000925 * lambda_L**-2.4684
-    L3 = 0.1 * lambda_L**-1.4516; L4 = 0.5 * lambda_L**-6.738
+    # 무차원 수 계산
+    N_Fr = max((v_m**2) / (9.81 * D_inner), 1e-5) # Froude Number
     
-    # 맵(Map)을 통한 유동 양식 판별 (분리형, 간헐형, 분산형)
+    # 표면장력(sigma)은 혼합물 특성상 동적 추출이 어려워 탄화수소 범용값(0.02 N/m) 가정
+    sigma_L = 0.02  
+    N_VL = v_SL * ((rho_L / (9.81 * sigma_L))**0.25) # Liquid Velocity Number
+    
+    # 유동 양식 경계값 계산
+    L1 = 316 * lambda_L**0.302
+    L2 = 0.000925 * lambda_L**-2.4684
+    L3 = 0.1 * lambda_L**-1.4516
+    L4 = 0.5 * lambda_L**-6.738
+    
+    # 맵(Map)을 통한 유동 양식 판별
     regime = "Transition"
     if (lambda_L < 0.01 and N_Fr < L1) or (lambda_L >= 0.01 and N_Fr < L2): regime = "Segregated"
     elif (0.01 <= lambda_L < 0.4 and L3 < N_Fr <= L1) or (lambda_L >= 0.4 and L3 < N_Fr <= L4): regime = "Intermittent"
     elif (lambda_L < 0.4 and N_Fr >= L1) or (lambda_L >= 0.4 and N_Fr > L4): regime = "Distributed"
     
-    # 유동 양식에 따른 수평 배관 액체 홀드업(H_L_0) 경험식 계수
-    if regime == "Segregated": a, b, c = 0.98, 0.4846, 0.0868
-    elif regime == "Intermittent": a, b, c = 0.845, 0.5351, 0.0173
-    elif regime == "Distributed": a, b, c = 1.065, 0.5824, 0.0609
-    else: a, b, c = 0.9125, 0.50985, 0.05205 # Transition
+    # 내부 헬퍼 함수: 특정 유동 양식에 대한 수평 홀드업 및 경사 보정계수 도출
+    def get_holdup_and_C(reg_type):
+        if reg_type == "Segregated":
+            a, b, c = 0.98, 0.4846, 0.0868
+            d, e, f, g = 0.011, -3.768, 3.539, -1.614
+        elif reg_type == "Intermittent":
+            a, b, c = 0.845, 0.5351, 0.0173
+            d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
+        else: # Distributed
+            a, b, c = 1.065, 0.5824, 0.0609
+            d, e, f, g = 0, 0, 0, 0 # Distributed는 경사 보정이 없음
+            
+        # 수평 홀드업 계산 (N_Fr로 '나누는' 것이 Original 수식)
+        H_L_0 = (a * lambda_L**b) / (N_Fr**c)
+        H_L_0 = min(max(H_L_0, lambda_L), 1.0) # 물리적 한계치 방어
+        
+        # 경사 보정계수 (C) 계산
+        if d == 0: C_val = 0
+        else: C_val = (1 - lambda_L) * math.log(max(d * (lambda_L**e) * (N_VL**f) * (N_Fr**g), 1e-5))
+        
+        return H_L_0, C_val
 
-    H_L_0 = a * lambda_L**b / N_Fr**c
-    if H_L_0 < lambda_L: H_L_0 = lambda_L
-    if H_L_0 > 1.0: H_L_0 = 1.0
+    # 유동 양식에 따른 실제 액체 홀드업(H_L) 결정 로직
+    if regime == "Transition":
+        # [수정됨] Transition 영역은 가중치(A)를 이용해 Segregated와 Intermittent를 보간해야 함
+        H_L_0_seg, C_seg = get_holdup_and_C("Segregated")
+        H_L_0_int, C_int = get_holdup_and_C("Intermittent")
+        
+        H_L_seg = H_L_0_seg * (1 + C_seg * math.sin(math.radians(angle_deg)))
+        H_L_int = H_L_0_int * (1 + C_int * math.sin(math.radians(angle_deg)))
+        
+        A_weight = (L3 - N_Fr) / (L3 - L2) if L3 != L2 else 0.5
+        H_L = A_weight * H_L_seg + (1 - A_weight) * H_L_int
+    else:
+        H_L_0, C_val = get_holdup_and_C(regime)
+        # 상승/하강에 따른 홀드업 보정 (beta = C_val)
+        H_L = H_L_0 * (1 + C_val * math.sin(math.radians(angle_deg)))
+        
+    H_L = min(max(H_L, 0.0), 1.0) # 최종 H_L 클리핑
 
-    # 경사 보정 계수(Inclination Correction Factor) 적용
-    C_val = (1 - lambda_L) * math.log(max(lambda_L, 1e-5) * 0.01**0.05 * 1e5**0.1 * 1e5**0.1)
-    if regime == "Segregated": beta = max(0, (1 - lambda_L) * math.log(max(1e-5, C_val)))
-    else: beta = 0
-    
-    # 실제 액체 홀드업 (H_L) - 파이프 내에 실제로 존재하는 액체의 부피 비
-    H_L = H_L_0 * (1 + beta * math.sin(math.radians(angle_deg)))
-    if H_L < 0: H_L = 0
-    elif H_L > 1: H_L = 1
-    
     # 2상 유동의 혼합 물성치 (밀도 및 점도)
     rho_n = rho_L * lambda_L + rho_G * (1 - lambda_L) # No-slip 밀도 (마찰 계산용)
     rho_s = rho_L * H_L + rho_G * (1 - H_L)           # Slip 밀도 (정수두/중력 계산용)
@@ -101,8 +129,11 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     
     # 마찰 계수 및 2상 승수 보정 (e^S)
     f_n = churchill_friction_factor(Re_n, roughness/D_inner)
-    y = lambda_L / H_L**2 if H_L > 0 else 1.0
-    S = math.log(y) / (-0.0523 + 3.182 * math.log(y) - 0.8725 * (math.log(y))**2 + 0.01853 * (math.log(y))**4) if 1 < y < 1.2 else math.log(y)
+    y = lambda_L / (H_L**2) if H_L > 0 else 1.0
+    y = max(y, 1e-5) # 로그 에러 방지
+    
+    if 1 < y < 1.2: S = math.log(y) / (-0.0523 + 3.182 * math.log(y) - 0.8725 * (math.log(y))**2 + 0.01853 * (math.log(y))**4)
+    else: S = math.log(y)
     f_tp = f_n * math.exp(S)
     
     # 중력 강하량(Elevation)과 가속도 강하 인자(Acceleration, E_k)
