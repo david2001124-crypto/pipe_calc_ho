@@ -6,6 +6,14 @@ import numpy as np
 import plotly.graph_objects as go
 import material_db
 
+# DB 호환성 안전장치 (캐시에 과거 버전이 남아있을 경우를 대비)
+if hasattr(material_db, 'HYSYS_FITTING_DB'):
+    FITTING_DB = material_db.HYSYS_FITTING_DB
+elif hasattr(material_db, 'FITTING_LE_D_DB'):
+    FITTING_DB = material_db.FITTING_LE_D_DB
+else:
+    FITTING_DB = {"Valve/Fitting (Default)": {"A": 0.0, "B": 30, "Chisholm_B": 1.5}}
+
 st.set_page_config(page_title="해양 파이프라인 시뮬레이터", layout="wide")
 
 # ==========================================
@@ -21,7 +29,7 @@ def churchill_friction_factor(Re, ed):
     return f
 
 def calculate_fT_hysys(roughness, D_inner):
-    """ HYSYS 기준: 해당 배관 조도에서 레이놀즈 수를 극단적으로 높여 Fully Turbulent 마찰 계수(fT) 도출 """
+    """ HYSYS 기준: 배관 조도에서 레이놀즈 수를 극한으로 높여 Fully Turbulent 마찰 계수(fT) 도출 """
     Re_test = 1e6
     f_old = 0.0
     for _ in range(100):
@@ -42,7 +50,6 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     L1 = 316 * lambda_L**0.302; L2 = 0.000925 * lambda_L**-2.4684
     L3 = 0.1 * lambda_L**-1.4516; L4 = 0.5 * lambda_L**-6.738
     
-    # 맵 기반 유동 양식 판별
     regime = "Transition"
     if (lambda_L < 0.01 and N_Fr < L1) or (lambda_L >= 0.01 and N_Fr < L2): regime = "Segregated"
     elif (0.01 <= lambda_L < 0.4 and L3 < N_Fr <= L1) or (lambda_L >= 0.4 and L3 < N_Fr <= L4): regime = "Intermittent"
@@ -57,7 +64,7 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     if H_L_0 < lambda_L: H_L_0 = lambda_L
     if H_L_0 > 1.0: H_L_0 = 1.0
 
-    C_val = (1 - lambda_L) * math.log(max(lambda_L, 1e-5) * 0.01**0.05 * 1e5**0.1 * 1e5**0.1) # 단순화 보정
+    C_val = (1 - lambda_L) * math.log(max(lambda_L, 1e-5) * 0.01**0.05 * 1e5**0.1 * 1e5**0.1)
     if regime == "Segregated": beta = max(0, (1 - lambda_L) * math.log(max(1e-5, C_val)))
     else: beta = 0
     
@@ -81,14 +88,9 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     return {"f_tp": f_tp, "rho_n": rho_n, "v_m": v_m, "dP_dl_elev": dP_dl_elev, "E_k": E_k, "flow_regime": regime, "lambda_L": lambda_L, "Re_n": Re_n}
 
 def get_k_pipe_extrapolated(T_C, T_arr, k_arr):
-    if T_C >= T_arr[0] and T_C <= T_arr[-1]:
-        return np.interp(T_C, T_arr, k_arr)
-    elif T_C < T_arr[0]:
-        slope = (k_arr[1] - k_arr[0]) / (T_arr[1] - T_arr[0])
-        return k_arr[0] + slope * (T_C - T_arr[0])
-    else:
-        slope = (k_arr[-1] - k_arr[-2]) / (T_arr[-1] - T_arr[-2])
-        return k_arr[-1] + slope * (T_C - T_arr[-1])
+    if T_C >= T_arr[0] and T_C <= T_arr[-1]: return np.interp(T_C, T_arr, k_arr)
+    elif T_C < T_arr[0]: return k_arr[0] + ((k_arr[1] - k_arr[0]) / (T_arr[1] - T_arr[0])) * (T_C - T_arr[0])
+    else: return k_arr[-1] + ((k_arr[-1] - k_arr[-2]) / (T_arr[-1] - T_arr[-2])) * (T_C - T_arr[-1])
 
 def get_robust_prop(prop, T, P, fluid_string, fractions, default_val, tracker):
     try:
@@ -100,10 +102,10 @@ def get_robust_prop(prop, T, P, fluid_string, fractions, default_val, tracker):
             try:
                 for i, f in enumerate(fluids):
                     val_mix += fractions[i] * PropsSI(prop, 'T', T, 'P', P, f)
-                tracker.add(f"'{prop}' 물성치 계산 실패 ➔ Leduc 가중 평균(Mixing Rule)으로 우회 계산됨.")
+                tracker.add(f"'{prop}' 물성치 계산 실패 ➔ 단일 성분 가중 평균(Mixing Rule) 우회 적용됨.")
                 return val_mix
             except: pass
-        tracker.add(f"'{prop}' 물성치 계산 실패 ➔ 설정된 기본 상수({default_val})로 강제 적용됨.")
+        tracker.add(f"'{prop}' 물성치 계산 실패 ➔ 설정된 기본 상수({default_val}) 강제 적용됨.")
         return default_val
 
 def calculate_heat_transfer(Re, Pr, k_fluid, D_in, D_out, k_pipe, k_ins, t_ins, h_ext):
@@ -122,14 +124,10 @@ def calculate_heat_transfer(Re, Pr, k_fluid, D_in, D_out, k_pipe, k_ins, t_ins, 
 # ==========================================
 
 def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker):
-    """ HYSYS Inner Loop: 출구 온도가 주어졌을 때 운동량 보존(Beggs&Brill 등)을 만족하는 출구 압력을 할선법(Secant)으로 도출 """
-    P0 = P_in
-    P1 = P_in - 500
-    tol = 100
+    P0 = P_in; P1 = P_in - 500; tol = 100
     
     def calc_P_out(P_guess):
-        P_avg = (P_in + P_guess) / 2.0
-        T_avg = (T_in + T_out_guess) / 2.0
+        P_avg = (P_in + P_guess) / 2.0; T_avg = (T_in + T_out_guess) / 2.0
         if P_avg < 10000: raise ValueError(f"내부 압력이 너무 낮습니다 ({P_avg/1e5:.3f} bar).")
             
         try: phase_raw = PhaseSI('T', T_avg, 'P', P_avg, fluid_string)
@@ -148,7 +146,7 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             Re = (rho * vel * D_inner) / mu
             f_factor = churchill_friction_factor(Re, roughness/D_inner)
             dP_total = ((f_factor * rho * vel**2) / (2 * D_inner)) * dL + (rho * 9.81 * math.sin(math.radians(angle_deg))) * dL
-            regime = "1-Phase"
+            regime = "1-Phase Liquid" if rho > 300 else "1-Phase Gas"
         else:
             rho_L = PropsSI('D', 'P', P_avg, 'Q', 0, fluid_string)
             rho_G = PropsSI('D', 'P', P_avg, 'Q', 1, fluid_string)
@@ -176,24 +174,19 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
         if abs(f1 - f0) < 1e-5: P_new = P1 - f1 * 0.5
         else: P_new = P1 - f1 * ((P1 - P0) / (f1 - f0))
         
-        P0, f0 = P1, f1
-        P1 = P_new
+        P0, f0 = P1, f1; P1 = P_new
         P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
         f1 = P_calc1 - P1
 
     return P1, is_tp1, Q1, reg1
 
 def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, D_outer, roughness, angle_deg, dL, k_pipe, k_ins, t_ins, h_ext, T_amb_K, audit_tracker):
-    """ HYSYS Middle Loop: 에너지 보존을 만족하는 출구 온도를 할선법(Secant)으로 도출 """
-    T0 = T_in
-    T1 = T_in - 0.1
-    tol = 0.01
+    T0 = T_in; T1 = T_in - 0.1; tol = 0.01
     
     try: 
         H_in = PropsSI('H', 'T', T_in, 'P', P_in, fluid_string)
         use_enthalpy = True
-    except: 
-        use_enthalpy = False
+    except: use_enthalpy = False
         
     def calc_T_out(T_guess):
         P_out_calc, is_tp, Q_val, regime = solve_inner_loop_pressure(T_in, P_in, T_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker)
@@ -202,7 +195,6 @@ def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, 
         Cp = get_robust_prop('C', T_avg, P_avg, fluid_string, norm_fractions, 2000, audit_tracker)
         k_fluid = get_robust_prop('L', T_avg, P_avg, fluid_string, norm_fractions, 0.1, audit_tracker)
         mu = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
-        
         try: rho = PropsSI('D', 'T', T_avg, 'P', P_avg, fluid_string)
         except: rho = 500
             
@@ -213,8 +205,7 @@ def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, 
         Q_heat = U * math.pi * D_outer * dL * (T_amb_K - T_avg) 
         
         if use_enthalpy:
-            try: 
-                return PropsSI('T', 'H', H_in + Q_heat / mass_flow, 'P', P_out_calc, fluid_string), P_out_calc, is_tp, Q_val, regime
+            try: return PropsSI('T', 'H', H_in + Q_heat / mass_flow, 'P', P_out_calc, fluid_string), P_out_calc, is_tp, Q_val, regime
             except: pass
         return T_in + Q_heat / (mass_flow * Cp), P_out_calc, is_tp, Q_val, regime
         
@@ -230,8 +221,7 @@ def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, 
         if abs(f1 - f0) < 1e-6: T_new = T1 - f1 * 0.5
         else: T_new = T1 - f1 * ((T1 - T0) / (f1 - f0))
         
-        T0, f0 = T1, f1
-        T1 = T_new
+        T0, f0 = T1, f1; T1 = T_new
         T_calc1, P_calc1, is_tp1, Q1, reg1 = calc_T_out(T1)
         f1 = T_calc1 - T1
 
@@ -285,7 +275,7 @@ if "Pipe" in comp_type:
         st.rerun()
 else:
     fc1, fc2 = st.columns(2)
-    f_type = fc1.selectbox("피팅/밸브 종류", list(material_db.HYSYS_FITTING_DB.keys()))
+    f_type = fc1.selectbox("피팅/밸브 종류", list(FITTING_DB.keys()))
     f_qty = fc2.number_input("수량", min_value=1, value=1, step=1)
     
     if st.button("➕ 피팅/밸브 추가", type="secondary"):
@@ -331,7 +321,7 @@ st.header("3. 외부 환경 (전체 공통 적용)")
 col_env1, col_env2, col_env3 = st.columns(3)
 T_amb_C = col_env1.number_input("대기 온도 (°C)", value=25.0)
 h_ext = col_env2.number_input("외부 대류 열전달 계수 (W/m²K)", value=10.0)
-N_per_pipe = col_env3.number_input("배관당 분할 격자 수 (N)", min_value=1, value=10, step=1, help="내부 루프 수렴으로 인해 적은 N으로도 높은 정확도를 확보합니다.")
+N_per_pipe = col_env3.number_input("구간(Pipe)당 분할 노드 수", min_value=1, value=10, step=1, help="Nested Loop 엔진으로 5~10개만으로도 고도의 수렴을 보장합니다.")
 
 col_env4, col_env5 = st.columns(2)
 t_ins = col_env4.number_input("보온재 두께 (m)", min_value=0.0, value=0.0, format="%.4f")
@@ -371,9 +361,7 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
     try:
         for comp_idx, comp in enumerate(st.session_state.pipeline):
             if comp.get("type") == "Pipe":
-                # [A] 직관(Pipe) 물리 해석: 3중 루프 및 Beggs & Brill
                 status_box.update(label=f"🔄 [Pipe {comp_idx+1}/{len(st.session_state.pipeline)}] 3중 루프 수렴(Outer-Middle-Inner) 계산 중...")
-                
                 curr_D_inner = comp.get("D_inner", curr_D_inner)
                 curr_thickness = comp.get("thickness", curr_thickness)
                 if "material" in comp: curr_mat_info = material_db.MATERIAL_MAP[comp["material"]]
@@ -413,7 +401,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                     })
 
             elif comp.get("type") == "Fitting":
-                # [B] 피팅/밸브(Fitting) 물리 해석: Crane TP-410, Chisholm B, PH-Flash 열역학
                 f_name = comp.get("name", "Unknown")
                 qty = comp.get("qty", 1)
                 status_box.update(label=f"🔄 [Fitting {comp_idx+1}/{len(st.session_state.pipeline)}] {f_name} (x{qty}) 국부 저항 계산 중...")
@@ -421,44 +408,39 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                 if P_current_Pa < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 통과 전 압력이 {P_current_Pa/1e5:.3f} bar로 너무 낮습니다.")
 
                 A_cross = math.pi * (curr_D_inner / 2)**2
-                fit_data = material_db.HYSYS_FITTING_DB.get(f_name, {"A": 0.0, "B": 30, "Chisholm_B": 1.5})
+                fit_data = FITTING_DB.get(f_name, {"A": 0.0, "B": 30, "Chisholm_B": 1.5})
                 
-                # 1. 속도 수두 인자 K 계산 (Crane TP-410 방식)
                 f_T = calculate_fT_hysys(curr_roughness, curr_D_inner)
                 K_factor = (fit_data["A"] + fit_data["B"] * f_T) * qty
                 
-                # 2. 유동 상태 판별
                 try: phase_raw = PhaseSI('T', T_current_K, 'P', P_current_Pa, fluid_string)
                 except: phase_raw = "unknown"
                 is_twophase = (phase_raw == 'twophase')
                 
-                # 3. 국부 압력 강하(dP) 계산
                 if not is_twophase:
                     rho = PropsSI('D', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     vel = mass_flow / (rho * A_cross)
                     dP_fit = K_factor * rho * (vel**2) / 2.0
-                    regime_label = "Fitting (1-Phase)"
+                    regime_label = "1-Phase Liquid (Fitting)" if rho > 300 else "1-Phase Gas (Fitting)"
                 else:
                     Q_val = PropsSI('Q', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     rho_L = PropsSI('D', 'P', P_current_Pa, 'Q', 0, fluid_string)
                     rho_G = PropsSI('D', 'P', P_current_Pa, 'Q', 1, fluid_string)
                     G_mass_flux = mass_flow / A_cross
                     
-                    dP_LO = K_factor * (G_mass_flux**2) / (2 * rho_L) # Liquid-Only Pressure Drop
-                    # Chisholm Two-Phase Multiplier
+                    dP_LO = K_factor * (G_mass_flux**2) / (2 * rho_L)
                     phi_LO2 = 1 + (rho_L / rho_G - 1) * (fit_data["Chisholm_B"] * Q_val * (1 - Q_val) + Q_val**2)
                     dP_fit = dP_LO * phi_LO2
-                    regime_label = "Fitting (2-Phase)"
+                    regime_label = "2-Phase (Fitting)"
                 
                 P_out_fit = P_current_Pa - dP_fit
                 if P_out_fit < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 밸브 통과 후 압력이 진공 수준({P_out_fit/1e5:.3f} bar)입니다. 밸브를 열거나 유량을 줄이세요.")
                 
-                # 4. 온도 업데이트: PH-Flash (등엔탈피 팽창, Joule-Thomson 효과 모사)
                 try:
                     H_in = PropsSI('H', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     T_out_fit = PropsSI('T', 'H', H_in, 'P', P_out_fit, fluid_string)
                 except:
-                    T_out_fit = T_current_K # Fail-safe fallback
+                    T_out_fit = T_current_K
                 
                 P_current_Pa = P_out_fit
                 T_current_K = T_out_fit
@@ -490,7 +472,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
 
     st.subheader("📈 파이프라인 프로파일")
     
-    # 2D 형상 시각화
     fig_2d = go.Figure()
     fig_2d.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["Z_cum (m)"], mode='lines', line=dict(color='gray', width=4), name='Pipeline'))
     
@@ -502,16 +483,26 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
             name='Valve/Fitting', hovertext=fittings_df['Component']
         ))
     
-    fig_2d.update_layout(title="파이프라인 2D 스케치 (Side View)", xaxis_title="누적 길이 (m)", yaxis_title="고도 (m)", showlegend=True)
+    fig_2d.update_layout(title_text="파이프라인 2D 스케치 (Side View)", xaxis_title_text="누적 길이 (m)", yaxis_title_text="고도 (m)", showlegend=True)
     
     fig_pt = go.Figure()
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["P (bar)"], mode='lines', name='Pressure (bar)', yaxis='y1', line=dict(color='blue')))
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["T (°C)"], mode='lines', name='Temperature (°C)', yaxis='y2', line=dict(color='red', dash='dash')))
     
+    # Plotly 폰트 에러 픽스: 최신 dict 방식 적용
     fig_pt.update_layout(
-        title="압력 및 온도 프로파일 (Valve 구간 압력 강하 주목)", xaxis_title="누적 길이 (m)",
-        yaxis=dict(title="압력 (bar)", titlefont=dict(color="blue"), tickfont=dict(color="blue")),
-        yaxis2=dict(title="온도 (°C)", titlefont=dict(color="red"), tickfont=dict(color="red"), overlaying="y", side="right"),
+        title_text="압력 및 온도 프로파일 (Valve 구간 압력 강하 주목)",
+        xaxis_title_text="누적 길이 (m)",
+        yaxis=dict(
+            title=dict(text="압력 (bar)", font=dict(color="blue")),
+            tickfont=dict(color="blue")
+        ),
+        yaxis2=dict(
+            title=dict(text="온도 (°C)", font=dict(color="red")),
+            tickfont=dict(color="red"),
+            overlaying="y",
+            side="right"
+        ),
         hovermode="x unified"
     )
     
