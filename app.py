@@ -24,11 +24,10 @@ else:
 def churchill_friction_factor(Re, ed):
     """
     [Churchill (1977) 마찰계수 방정식]
-    레이놀즈 수(Re)와 상대 조도(e/d)를 입력받아 마찰계수(f)를 반환합니다.
-    Moody 차트의 층류, 전이 영역, 난류 전 구간을 불연속점(Discontinuity) 없이 
-    하나의 수식으로 덮을 수 있어 컴퓨터 반복 해석 시 발산(터짐)을 막아줍니다.
+    층류, 전이 영역, 난류 전 구간을 불연속점 없이 하나의 수식으로 계산.
+    반복 해석 시 발산(터짐)을 막아줍니다.
     """
-    if Re <= 0: return 0.01 # 유속이 거의 없을 때의 방어 로직
+    if Re <= 0: return 0.01 
     A = (-2.457 * math.log((7.0 / Re)**0.9 + 0.27 * ed))**16
     B = (37530.0 / Re)**16
     f = 8 * ((8 / Re)**12 + 1 / (A + B)**1.5)**(1/12)
@@ -37,35 +36,31 @@ def churchill_friction_factor(Re, ed):
 def calculate_fT_hysys(roughness, D_inner):
     """
     [완전 난류 마찰계수(fT) 계산 - HYSYS/Crane TP-410 방식]
-    밸브 및 피팅의 압력 강하(K-factor)를 구하기 위해서는 fT가 필요합니다.
     유속을 무한대(Re -> 무한대)로 가속시켰을 때 마찰계수가 더 이상 변하지 않고
-    배관의 거칠기(Roughness)에 의해서만 결정되는 한계 수렴 지점을 
-    Churchill 공식을 반복 호출하여 수학적으로 찾아냅니다.
+    배관 거칠기에 의해서만 결정되는 한계 수렴 지점을 반복 호출로 찾아냅니다.
     """
     Re_test = 1e6 # 초기 레이놀즈 수를 난류로 크게 설정
     f_old = 0.0
     for _ in range(100):
         f_new = churchill_friction_factor(Re_test, roughness / D_inner)
-        if abs(f_new - f_old) < 1e-7: # 마찰계수가 더 이상 안 변하면 (수렴)
+        if abs(f_new - f_old) < 1e-7: 
             return f_new
         f_old = f_new
-        Re_test *= 10 # 레이놀즈 수를 10배씩 뻥튀기하며 극한으로 보냄
+        Re_test *= 10 # 극한으로 보냄
     return f_new
 
-def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_deg, roughness, P_Pa):
-    """
 def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner, angle_deg, roughness, P_Pa):
     """
     [Beggs and Brill (1973) Rigorous Model]
-    사용자 지적사항 반영 완료: Transition 영역의 가중 보간법(Interpolation) 적용 및
+    Transition 영역의 가중 보간법(Interpolation) 적용 및
     액체 속도수(N_VL) 기반의 엄밀한 경사 보정 계수(Inclination Correction) 복원.
-    CoolProp에서 추출한 실제 표면장력(sigma_L) 변수 추가 연동.
+    하향(Downhill) 유동에 대한 완벽한 처리 및 CoolProp 표면장력(sigma_L) 연동.
     """
     v_m = v_SL + v_SG # 혼합물 유속
     if v_m <= 0: v_m = 1e-6
     lambda_L = max(v_SL / v_m, 1e-5) # 입력 액체 체적비 (No-slip holdup)
     
-    # 무차원 수 계산
+    # 무차원 수 계산 (관성력, 중력, 표면장력)
     N_Fr = max((v_m**2) / (9.81 * D_inner), 1e-5) # Froude Number
     N_VL = v_SL * ((rho_L / (9.81 * sigma_L))**0.25) # Liquid Velocity Number
     
@@ -83,38 +78,33 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
     
     # 내부 헬퍼 함수: 특정 유동 양식에 대한 수평 홀드업 및 경사 보정계수 도출
     def get_holdup_and_C(reg_type):
-        # 1. 수평 홀드업 계산 (a, b, c는 상향/하향 무관하게 유동 양식에 따라 동일)
-        if reg_type == "Segregated":
-            a, b, c = 0.98, 0.4846, 0.0868
-        elif reg_type == "Intermittent":
-            a, b, c = 0.845, 0.5351, 0.0173
-        else: # Distributed
-            a, b, c = 1.065, 0.5824, 0.0609
+        # 1. 수평 홀드업 계산
+        if reg_type == "Segregated": a, b, c = 0.98, 0.4846, 0.0868
+        elif reg_type == "Intermittent": a, b, c = 0.845, 0.5351, 0.0173
+        else: a, b, c = 1.065, 0.5824, 0.0609 # Distributed
             
         H_L_0 = (a * lambda_L**b) / (N_Fr**c)
         H_L_0 = min(max(H_L_0, lambda_L), 1.0) # 물리적 한계치 방어
         
         # 2. 경사 보정계수 (C) 상수 결정 (Uphill vs Downhill 완벽 분리)
         if angle_deg >= 0: # Uphill (상향 유동 및 수평)
-            if reg_type == "Segregated":
-                d, e, f, g = 0.011, -3.768, 3.539, -1.614
-            elif reg_type == "Intermittent":
-                d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
-            else: # Distributed (분산형은 상향에서 경사 보정 없음)
-                d, e, f, g = 0, 0, 0, 0 
-        else: # Downhill (하향 유동)
-            # Beggs & Brill (1973): 하향 유동은 모든 유동 양식(All Flow Regimes)에 대해 동일한 보정 계수 적용
+            if reg_type == "Segregated": d, e, f, g = 0.011, -3.768, 3.539, -1.614
+            elif reg_type == "Intermittent": d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
+            else: d, e, f, g = 0, 0, 0, 0 # Distributed
+        else: # Downhill (하향 유동 - 모든 Regime 공통 상수)
             d, e, f, g = 4.70, -0.3692, 0.1244, -0.5056
             
-        # 경사 보정계수 수식 계산 (d=0 이면 즉시 0 반환하여 log 에러 원천 차단)
-        if d == 0: C_val = 0
-        else: C_val = (1 - lambda_L) * math.log(max(d * (lambda_L**e) * (N_VL**f) * (N_Fr**g), 1e-5))
+        # 경사 보정계수 수식 계산
+        if d == 0: 
+            C_val = 0
+        else: 
+            C_val = (1 - lambda_L) * math.log(max(d * (lambda_L**e) * (N_VL**f) * (N_Fr**g), 1e-5))
         
         return H_L_0, C_val
 
     # 유동 양식에 따른 실제 액체 홀드업(H_L) 결정 로직
     if regime == "Transition":
-        # [수정됨] Transition 영역은 가중치(A)를 이용해 Segregated와 Intermittent를 보간해야 함
+        # Transition 영역 보간법 (Segregated와 Intermittent 사이)
         H_L_0_seg, C_seg = get_holdup_and_C("Segregated")
         H_L_0_int, C_int = get_holdup_and_C("Intermittent")
         
@@ -125,14 +115,13 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
         H_L = A_weight * H_L_seg + (1 - A_weight) * H_L_int
     else:
         H_L_0, C_val = get_holdup_and_C(regime)
-        # 상승/하강에 따른 홀드업 보정 (beta = C_val)
         H_L = H_L_0 * (1 + C_val * math.sin(math.radians(angle_deg)))
         
-    H_L = min(max(H_L, 0.0), 1.0) # 최종 H_L 클리핑
+    H_L = min(max(H_L, 0.0), 1.0)
 
     # 2상 유동의 혼합 물성치 (밀도 및 점도)
-    rho_n = rho_L * lambda_L + rho_G * (1 - lambda_L) # No-slip 밀도 (마찰 계산용)
-    rho_s = rho_L * H_L + rho_G * (1 - H_L)           # Slip 밀도 (정수두/중력 계산용)
+    rho_n = rho_L * lambda_L + rho_G * (1 - lambda_L)
+    rho_s = rho_L * H_L + rho_G * (1 - H_L)
     mu_n = mu_L * lambda_L + mu_G * (1 - lambda_L)
     Re_n = (rho_n * v_m * D_inner) / mu_n
     
@@ -154,9 +143,7 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
 def get_k_pipe_extrapolated(T_C, T_arr, k_arr):
     """
     [선형 외삽법(Linear Extrapolation) 기반 열전도도 도출]
-    DB에 20℃~500℃ 데이터만 있을 때, 극저온(-160℃, LNG) 조건이 들어오면
-    단순히 20℃ 값을 쓰는(Clipping) 것이 아니라, 하위 2개 점의 기울기를 바탕으로
-    수학적으로 값을 연장(외삽)하여 신뢰성을 확보합니다.
+    DB에 극저온 조건이 없을 경우 기울기를 바탕으로 값을 연장(외삽)합니다.
     """
     if T_C >= T_arr[0] and T_C <= T_arr[-1]: return np.interp(T_C, T_arr, k_arr)
     elif T_C < T_arr[0]: return k_arr[0] + ((k_arr[1] - k_arr[0]) / (T_arr[1] - T_arr[0])) * (T_C - T_arr[0])
@@ -165,9 +152,7 @@ def get_k_pipe_extrapolated(T_C, T_arr, k_arr):
 def get_robust_prop(prop, T, P, fluid_string, fractions, default_val, tracker):
     """
     [혼합물(Mixture) 물성치 계산 안전장치 및 추적기(Audit Trail)]
-    CoolProp은 메탄+에탄 같은 혼합물에 대해 밀도는 잘 구하지만 점도(Viscosity) 모델이
-    없는 경우가 많습니다. 에러 시 앱이 뻗지 않도록 1. 단일 성분 가중평균(Mixing Rule), 
-    2. 상수 덮어쓰기 순으로 방어(Fallback)하며, 어떤 조치를 취했는지 tracker에 기록합니다.
+    CoolProp이 지원하지 않는 혼합물 전달물성치(점도, 표면장력 등)에 대한 우회 기법입니다.
     """
     try:
         return PropsSI(prop, 'T', T, 'P', P, fluid_string)
@@ -178,22 +163,18 @@ def get_robust_prop(prop, T, P, fluid_string, fractions, default_val, tracker):
             try:
                 for i, f in enumerate(fluids):
                     val_mix += fractions[i] * PropsSI(prop, 'T', T, 'P', P, f)
-                tracker.add(f"'{prop}' 혼합물 물성 에러 ➔ 단일성분 몰분율 가중평균(Mixing Rule) 적용")
+                tracker.add(f"'{prop}' 혼합물 물성 에러 ➔ 단일성분 가중평균(Mixing Rule) 적용")
                 return val_mix
             except: pass
-        tracker.add(f"'{prop}' 물성 모델 완전 부재 ➔ 기본 상수({default_val}) 덮어쓰기 적용")
+        tracker.add(f"'{prop}' 물성 모델 완전 부재 ➔ 기본 상수({default_val}) 방어 로직 적용")
         return default_val
 
 def calculate_heat_transfer(Re, Pr, k_fluid, D_in, D_out, k_pipe, k_ins, t_ins, h_ext):
     """
     [1차원 반경 방향 열 저항 네트워크(Thermal Resistance Network)]
-    전기 회로의 저항처럼 열전달 저항들을 직렬 합산하여 총괄 열전달 계수(U)를 구합니다.
-    1. 내부 유체 대류 저항 (Dittus-Boelter 방정식 사용)
-    2. 파이프 강재 전도 저항 (Fourier 원통 법칙)
-    3. 보온재(Insulation) 전도 저항
-    4. 외부 대기 강제/자연 대류 저항
+    열전달 저항들을 직렬 합산하여 총괄 열전달 계수(U)를 구합니다.
     """
-    Nu = 0.023 * (Re**0.8) * (Pr**0.3) if Re > 2300 else 4.36 # 층류면 4.36 (일정 열유속)
+    Nu = 0.023 * (Re**0.8) * (Pr**0.3) if Re > 2300 else 4.36 # 대류 열전달
     h_in = (Nu * k_fluid) / D_in if D_in > 0 else 1000
     R_conv_in = 1.0 / (h_in * math.pi * D_in)
     R_cond_pipe = math.log(D_out / D_in) / (2 * math.pi * k_pipe) if D_out > D_in else 0
@@ -210,17 +191,14 @@ def calculate_heat_transfer(Re, Pr, k_fluid, D_in, D_out, k_pipe, k_ins, t_ins, 
 
 def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker):
     """
-    [Inner Loop: 압력 수렴 알고리즘 (할선법 적용)]
-    Middle Loop에서 추정한 '출구 온도(T_out_guess)'가 맞다는 가정 하에,
-    입구와 출구의 "평균 온도 및 평균 압력"에서 발생하는 유체 마찰력(운동량 보존)을 계산해
-    실제 출구 압력(P_out_calc)을 역산하여 찾아내는 과정입니다.
+    [Inner Loop: 운동량 수지를 통한 압력 수렴 알고리즘 (할선법 적용)]
+    Middle Loop에서 추정한 '출구 온도'에서, 마찰력과 고저차를 만족하는 진짜 출구 압력을 역산.
     """
-    P0 = P_in              # 초기값 1 (압력강하 0 가정)
-    P1 = P_in - 500        # 초기값 2 (미세 강하 가정 - 기울기용)
-    tol = 100              # 오차 허용범위 (100 Pa = 0.001 bar)
+    P0 = P_in              
+    P1 = P_in - 500        
+    tol = 100              
     
     def calc_P_out(P_guess):
-        # 1. 평균 상태 변수 도출 (매우 중요: HYSYS Implicit 철학의 핵심)
         P_avg = (P_in + P_guess) / 2.0
         T_avg = (T_in + T_out_guess) / 2.0
         
@@ -235,8 +213,7 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             try: Q_val = PropsSI('Q', 'T', T_avg, 'P', P_avg, fluid_string)
             except: is_twophase = False
             
-        # 2. 유동 상(Phase)에 따른 압력 강하 연산
-        if not is_twophase: # --- 1상 유동 ---
+        if not is_twophase: # 단상 유동
             rho = PropsSI('D', 'T', T_avg, 'P', P_avg, fluid_string)
             mu = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
             vel = mass_flow / (rho * A_cross)
@@ -245,13 +222,13 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             
             dP_total = ((f_factor * rho * vel**2) / (2 * D_inner)) * dL + (rho * 9.81 * math.sin(math.radians(angle_deg))) * dL
             regime = "1-Phase Liquid" if rho > 300 else "1-Phase Gas"
-        else:               # --- 2상 유동 (Beggs & Brill) ---
+        else: # 2상 유동 (Beggs & Brill)
             rho_L = PropsSI('D', 'P', P_avg, 'Q', 0, fluid_string)
             rho_G = PropsSI('D', 'P', P_avg, 'Q', 1, fluid_string)
             mu_L = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-3, audit_tracker)
             mu_G = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
             
-            # CoolProp에서 표면장력('I') 추출 시도, 실패 시 탄화수소 기본값 0.02 N/m 방어 기제 적용
+            # ⭐️ CoolProp에서 실제 표면장력 호출 시도, 에러 시 0.02 방어 ⭐️
             sigma_L = get_robust_prop('I', T_avg, P_avg, fluid_string, norm_fractions, 0.02, audit_tracker)
             
             v_SG = (mass_flow * Q_val) / (rho_G * A_cross)
@@ -264,18 +241,16 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             
         return P_in - dP_total, is_twophase, Q_val, regime
 
-    # 3. 할선법 (Secant Method)을 통한 뿌리 찾기(Root Finding)
     P_calc0, is_tp0, Q0, reg0 = calc_P_out(P0)
-    f0 = P_calc0 - P0 # 오차 함수 = (계산된 P) - (내가 찍은 P)
+    f0 = P_calc0 - P0 
     if abs(f0) < tol: return P_calc0, is_tp0, Q0, reg0
         
     P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
     f1 = P_calc1 - P1
     
-    for _ in range(20): # 최대 20번 스무고개
+    for _ in range(20): # 할선법
         if abs(f1) < tol: return P_calc1, is_tp1, Q1, reg1
         
-        # 할선법 수식: 직선의 기울기를 이용해 다음 P값을 지능적으로 찍음
         if abs(f1 - f0) < 1e-5: P_new = P1 - f1 * 0.5 
         else: P_new = P1 - f1 * ((P1 - P0) / (f1 - f0))
         
@@ -283,33 +258,27 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
         P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
         f1 = P_calc1 - P1
 
-    return P1, is_tp1, Q1, reg1 # 수렴 실패 시 최후의 값 반환
+    return P1, is_tp1, Q1, reg1 
 
 def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, D_outer, roughness, angle_deg, dL, k_pipe, k_ins, t_ins, h_ext, T_amb_K, audit_tracker):
     """
-    [Middle Loop: 온도 수렴 알고리즘 (에너지 보존, PH-Flash 기반)]
-    임의의 출구 온도를 찍어보고, 그 온도일 때의 압력 강하(Inner Loop 호출)를 알아낸 뒤,
-    파이프 방열/흡열량을 계산하여 열역학 1법칙(엔탈피 변화)에 딱 맞아떨어지는 
-    진짜 출구 온도를 할선법으로 찾아냅니다.
+    [Middle Loop: 에너지 수지를 통한 온도 수렴 알고리즘 (PH-Flash 기반)]
+    가상의 출구 온도에서 발생하는 열교환량(Q)을 엔탈피에 반영해, 상태방정식이 말하는 진짜 온도를 할선법으로 찾음.
     """
-    T0 = T_in          # 초기값 1
-    T1 = T_in - 0.1    # 초기값 2
-    tol = 0.01         # 오차 허용범위 (0.01 도씨)
+    T0 = T_in          
+    T1 = T_in - 0.1    
+    tol = 0.01         
     
-    # 열역학적 상태 계산(PH-Flash) 사용 여부 판단
     try: 
         H_in = PropsSI('H', 'T', T_in, 'P', P_in, fluid_string)
-        use_enthalpy = True  # 혼합물 지원 시 정확한 엔탈피 방식 사용
+        use_enthalpy = True 
     except: 
-        use_enthalpy = False # 에러 시 근사 비열(Cp) 방식 사용
+        use_enthalpy = False
         
     def calc_T_out(T_guess):
-        # 1. 찍어본 온도를 바탕으로 Inner Loop(압력) 호출 ➔ 진실된 압력을 받아옴!
         P_out_calc, is_tp, Q_val, regime = solve_inner_loop_pressure(T_in, P_in, T_guess, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, roughness, angle_deg, dL, audit_tracker)
-        
         P_avg = (P_in + P_out_calc) / 2.0; T_avg = (T_in + T_guess) / 2.0
         
-        # 2. 평균 온도/압력 기반 물성 추출 및 열전달량(Q) 도출
         Cp = get_robust_prop('C', T_avg, P_avg, fluid_string, norm_fractions, 2000, audit_tracker)
         k_fluid = get_robust_prop('L', T_avg, P_avg, fluid_string, norm_fractions, 0.1, audit_tracker)
         mu = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
@@ -322,15 +291,12 @@ def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, 
         U = calculate_heat_transfer(Re, Pr, k_fluid, D_inner, D_outer, k_pipe, k_ins, t_ins, h_ext)
         Q_heat = U * math.pi * D_outer * dL * (T_amb_K - T_avg) 
         
-        # 3. 출구 온도(T_out) 역산
         if use_enthalpy:
             try: 
-                # [PH-Flash 로직] 출구 엔탈피 = 입구 엔탈피 + (Q/m). 압력과 엔탈피로 온도 역산!
                 return PropsSI('T', 'H', H_in + Q_heat / mass_flow, 'P', P_out_calc, fluid_string), P_out_calc, is_tp, Q_val, regime
             except: pass
         return T_in + Q_heat / (mass_flow * Cp), P_out_calc, is_tp, Q_val, regime
 
-    # 4. 할선법 적용 (구조는 Inner Loop와 완전 동일)
     T_calc0, P_calc0, is_tp0, Q0, reg0 = calc_T_out(T0)
     f0 = T_calc0 - T0
     if abs(f0) < tol: return T_calc0, P_calc0, is_tp0, Q0, reg0
@@ -379,7 +345,6 @@ mass_flow = st.number_input("질량 유량 (kg/s)", value=5.0)
 st.header("2. 순차적 파이프라인 빌더")
 comp_type = st.radio("추가할 컴포넌트", ["Pipe Segment (배관)", "Fitting / Valve (밸브 및 피팅)"], horizontal=True)
 
-# 라디오 버튼 선택에 따라 입력 폼이 동적으로 바뀜 (UI/UX 최적화)
 if "Pipe" in comp_type:
     ac1, ac2, ac3 = st.columns(3)
     p_len = ac1.number_input("직관 길이 (m)", min_value=0.0, value=10.0, format="%.4f")
@@ -399,7 +364,6 @@ if "Pipe" in comp_type:
         st.rerun()
 else:
     fc1, fc2 = st.columns(2)
-    # material_db의 광범위한 HYSYS 피팅 리스트를 불러옴
     f_type = fc1.selectbox("피팅/밸브 종류", list(FITTING_DB.keys()))
     f_qty = fc2.number_input("수량", min_value=1, value=1, step=1)
     
@@ -417,7 +381,6 @@ if st.session_state.pipeline:
     h3.caption("이동 / 삭제")
     st.divider()
     
-    # 리스트 이동 및 삭제가 가능한 깔끔한 테이블 뷰 표출
     for idx, comp in enumerate(st.session_state.pipeline):
         c1, c2, c3, c4, c5 = st.columns([0.1, 0.7, 0.06, 0.06, 0.08])
         c1.write(f"**[{idx+1}]**")
@@ -470,7 +433,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
     global_audit_tracker = set()
     results = []
     
-    # 시스템 전체 상태 추적 변수 초기화
     T_current_K = T_inlet_C + 273.15
     P_current_Pa = P_inlet_bar * 100000
     L_cum = 0.0
@@ -486,7 +448,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
     status_box = st.status("🤖 V6 디커플링 물리 엔진 및 PH-Flash 해석 진행 중...", expanded=True)
     
     try:
-        # 컴포넌트(Pipe -> Valve -> Pipe)를 순차적으로 통과하는 최외곽 루프 (Outer Loop)
         for comp_idx, comp in enumerate(st.session_state.pipeline):
             
             # ----------------------------------------
@@ -516,7 +477,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                 for i in range(N_per_pipe):
                     k_pipe_current = get_k_pipe_extrapolated(T_current_K - 273.15, asme_table["T_C"], asme_table["k_W_mK"])
                     
-                    # Middle Loop 함수 호출 (이 안에서 알아서 Inner Loop까지 돌며 T, P 수렴값을 찾아냄!)
                     T_out, P_out, is_tp, Q_val, flow_regime = solve_middle_loop_temp(
                         T_current_K, P_current_Pa, fluid_string, norm_fractions, mass_flow, A_cross, 
                         curr_D_inner, D_outer, curr_roughness, angle_deg, dL, 
@@ -541,14 +501,14 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
             elif comp.get("type") == "Fitting":
                 f_name = comp.get("name", "Unknown")
                 qty = comp.get("qty", 1)
-                status_box.update(label=f"🔄 [Fitting {comp_idx+1}/{len(st.session_state.pipeline)}] {f_name} 국부 저항 (Crane/Chisholm 모델) 독립 계산 중...")
+                status_box.update(label=f"🔄 [Fitting {comp_idx+1}/{len(st.session_state.pipeline)}] {f_name} 국부 저항 독립 계산 중...")
                 
                 if P_current_Pa < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 통과 전 압력이 {P_current_Pa/1e5:.3f} bar로 너무 낮습니다.")
 
                 A_cross = math.pi * (curr_D_inner / 2)**2
                 fit_data = FITTING_DB.get(f_name, {"A": 0.0, "B": 30, "Chisholm_B": 1.5})
                 
-                # [핵심 로직 1] 완전 난류 마찰계수(f_T) 도출 및 K-Factor 산출 (Crane TP-410 방법론)
+                # Crane TP-410 방법론: f_T 도출 및 K-Factor 산출
                 f_T = calculate_fT_hysys(curr_roughness, curr_D_inner)
                 K_factor = (fit_data["A"] + fit_data["B"] * f_T) * qty
                 
@@ -563,25 +523,21 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                     dP_fit = K_factor * rho * (vel**2) / 2.0
                     regime_label = "1-Phase Liquid" if rho > 300 else "1-Phase Gas"
                 else:
-                    # [핵심 로직 2] 2상 밸브 압력 강하 (Chisholm B-parameter 모델)
-                    # 2상 혼합물이 유로 변경부에서 와류를 발생시키는 슬립(Slip) 현상을 정확히 보정
+                    # 2상 밸브 압력 강하 (Chisholm B-parameter 모델)
                     Q_val = PropsSI('Q', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     rho_L = PropsSI('D', 'P', P_current_Pa, 'Q', 0, fluid_string)
                     rho_G = PropsSI('D', 'P', P_current_Pa, 'Q', 1, fluid_string)
                     G_mass_flux = mass_flow / A_cross
                     
-                    dP_LO = K_factor * (G_mass_flux**2) / (2 * rho_L) # 100% 액체라고 가정했을 때의 압력강하
-                    # 2상 승수 (Two-Phase Multiplier) 적용
+                    dP_LO = K_factor * (G_mass_flux**2) / (2 * rho_L) 
                     phi_LO2 = 1 + (rho_L / rho_G - 1) * (fit_data["Chisholm_B"] * Q_val * (1 - Q_val) + Q_val**2)
                     dP_fit = dP_LO * phi_LO2
                     regime_label = "2-Phase (Chisholm)"
                 
                 P_out_fit = P_current_Pa - dP_fit
-                if P_out_fit < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 밸브 통과 후 압력이 진공({P_out_fit/1e5:.3f} bar)에 도달! 밸브를 열거나 유량을 줄이세요.")
+                if P_out_fit < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 밸브 통과 후 진공({P_out_fit/1e5:.3f} bar)에 도달!")
                 
-                # [핵심 로직 3] PH-Flash 기반 등엔탈피 팽창 (Isenthalpic Throttling)
-                # 밸브를 통과하며 외부로 열을 빼앗기지 않았다(Q=0, H_out=H_in)고 가정하고,
-                # 떨어진 압력에 맞춰 기화가 일어나며 자가 냉각(Joule-Thomson)되는 진짜 온도를 상태방정식으로 역추산!
+                # PH-Flash 기반 등엔탈피 팽창 (Isenthalpic Throttling / Joule-Thomson 냉각)
                 try:
                     H_in = PropsSI('H', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     T_out_fit = PropsSI('T', 'H', H_in, 'P', P_out_fit, fluid_string)
@@ -609,9 +565,8 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
         st.error(f"예상치 못한 에러: {e}")
         st.stop()
         
-    # [계산 투명성 확보] CoolProp 엔진이 실패하여 Fallback을 사용한 경우 리포트 표출
     if global_audit_tracker:
-        st.info("⚠️ **[물성치 Fallback 알림]** 특정 구간에서 CoolProp 혼합물 엔진의 물리적 한계로 인해 다음 우회(Fallback) 가정이 사용되었습니다.\n\n" + "\n".join([f"- {msg}" for msg in global_audit_tracker]))
+        st.info("⚠️ **[물성치 Fallback 알림]** 특정 구간에서 물리적 한계로 인해 다음 가정이 사용되었습니다.\n\n" + "\n".join([f"- {msg}" for msg in global_audit_tracker]))
 
     df_res = pd.DataFrame(results)
     st.subheader("📊 시뮬레이션 결과 데이터")
@@ -619,7 +574,6 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
 
     st.subheader("📈 파이프라인 열/수력학적 프로파일")
     
-    # 1. 고저차(Elevation)를 반영한 2D 스케치
     fig_2d = go.Figure()
     fig_2d.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["Z_cum (m)"], mode='lines', line=dict(color='gray', width=4), name='Pipeline'))
     
@@ -633,12 +587,10 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
     
     fig_2d.update_layout(title_text="파이프라인 2D 스케치 (Side View)", xaxis_title_text="누적 길이 (m)", yaxis_title_text="고도 (m)", showlegend=True)
     
-    # 2. 압력(Pressure) 및 온도(Temperature) 변화 그래프 (줄-톰슨 팽창 및 마찰 강하 시각화)
     fig_pt = go.Figure()
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["P (bar)"], mode='lines', name='Pressure (bar)', yaxis='y1', line=dict(color='blue', width=3)))
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["T (°C)"], mode='lines', name='Temperature (°C)', yaxis='y2', line=dict(color='red', width=3, dash='dash')))
     
-    # Plotly 폰트 에러 픽스 반영 (최신 문법 적용)
     fig_pt.update_layout(
         title=dict(text="압력 및 온도 프로파일 (Valve 통과 시 급격한 하강 주목)"),
         xaxis=dict(title=dict(text="누적 길이 (m)")),
