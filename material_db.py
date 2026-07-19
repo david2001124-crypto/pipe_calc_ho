@@ -3,8 +3,6 @@ import numpy as np
 # ---------------------------------------------------------
 # RAW DATABASE (ASME BPVC Section II Part D - Table TCD)
 # ---------------------------------------------------------
-# 단위: Temp in °C, TC in W/(m·°C)
-# 제공된 원문 데이터를 바탕으로 TC(Thermal Conductivity) 값만 추출하여 구성했습니다.
 RAW_DB = {
     "Carbon and Low Alloy Steels": {
         "Material Group A [Note (1)]": {
@@ -22,35 +20,9 @@ RAW_DB = {
         "Material Group D [Note (4)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800],
             "k_W_mK": [36.3, 36.5, 36.7, 36.9, 37.0, 37.1, 37.2, 37.2, 37.2, 37.1, 36.9, 36.7, 36.5, 36.2, 35.8, 35.4, 35.0, 34.6, 34.2, 33.7, 33.3, 32.8, 32.4, 32.0, 31.5, 31.1, 30.6, 30.1, 28.7, 27.4, 26.8, 26.7]
-        },
-        "Material Group E [Note (5)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825],
-            "k_W_mK": [27.4, 28.4, 29.2, 29.8, 30.3, 30.8, 31.2, 31.5, 31.7, 31.9, 32.0, 32.1, 32.1, 32.0, 32.0, 31.9, 31.7, 31.6, 31.4, 31.2, 30.9, 30.7, 30.4, 30.1, 29.8, 29.4, 29.1, 28.6, 28.2, 27.6, 27.1, 26.9, 26.9]
-        },
-        "Ductile Cast Iron": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
-            "k_W_mK": [22.3, 23.1, 23.8, 24.4, 25.0, 25.5, 25.9, 26.3, 26.6, 26.9, 27.2, 27.4, 27.5, 27.7, 27.8, 27.9, 27.9, 27.9, 27.9, 27.9, 27.9, 27.8, 27.7, 27.6, 27.5, 27.3, 27.2, 27.0, 26.8, 26.5]
-        }
-    },
-    "High Chrome Steels": {
-        "Material Group F [Note (6)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325],
-            "k_W_mK": [37.50, 38.50, 39.18, 39.73, 40.15, 40.45, 40.64, 40.73, 40.73, 40.64, 40.47, 40.23, 39.93]
-        },
-        "Material Group G [Note (7)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
-            "k_W_mK": [24.6, 24.7, 24.7, 24.8, 24.9, 24.9, 25.0, 25.0, 25.1, 25.1, 25.2, 25.2, 25.2, 25.3, 25.3, 25.3, 25.4, 25.4, 25.4, 25.4, 25.5, 25.5, 25.5, 25.5, 25.5, 25.6, 25.6, 25.6, 25.6, 25.6]
         }
     },
     "High Alloy Steels": {
-        "Material Group H [Note (8)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
-            "k_W_mK": [20.1, 20.2, 20.2, 20.3, 20.4, 20.5, 20.5, 20.6, 20.7, 20.8, 20.9, 21.0, 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 22.1, 22.2, 22.4, 22.5, 22.7, 22.9, 23.1, 23.3, 23.5]
-        },
-        "Material Group I [Note (9)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
-            "k_W_mK": [17.3, 17.6, 18.0, 18.4, 18.9, 19.3, 19.8, 20.2, 20.7, 21.1, 21.5, 21.9, 22.2, 22.5, 22.8, 23.0, 23.3, 23.5, 23.6, 23.8, 23.9, 24.1, 24.2, 24.4, 24.5, 24.7, 24.9, 25.1, 25.4, 25.7]
-        },
         "Material Group J [Note (10)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
             "k_W_mK": [14.8, 15.3, 15.8, 16.2, 16.6, 17.0, 17.5, 17.9, 18.3, 18.6, 19.0, 19.4, 19.8, 20.1, 20.5, 20.8, 21.2, 21.5, 21.9, 22.2, 22.6, 22.9, 23.3, 23.6, 24.0, 24.3, 24.7, 25.0, 25.4, 25.7]
@@ -58,32 +30,18 @@ RAW_DB = {
         "Material Group K [Note (11)]": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
             "k_W_mK": [14.1, 14.6, 15.0, 15.4, 15.7, 16.1, 16.5, 16.8, 17.2, 17.6, 17.9, 18.3, 18.7, 19.0, 19.4, 19.7, 20.1, 20.5, 20.8, 21.2, 21.5, 21.9, 22.2, 22.6, 22.9, 23.2, 23.6, 23.9, 24.2, 24.6]
-        },
-        "Material Group L [Note (12)]": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750],
-            "k_W_mK": [11.1, 11.6, 12.0, 12.5, 12.9, 13.3, 13.8, 14.2, 14.6, 15.0, 15.5, 15.9, 16.3, 16.7, 17.1, 17.5, 18.0, 18.4, 18.8, 19.2, 19.6, 20.0, 20.4, 20.8, 21.2, 21.6, 22.0, 22.4, 22.8, 23.1]
-        }
-    },
-    "High Nickel Alloys": {
-        "Nickel N02200": {
-            "T_C": [100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525],
-            "k_W_mK": [66.8, 65.6, 64.3, 62.9, 61.7, 60.6, 59.4, 58.2, 57.0, 55.8, 54.9, 54.9, 55.7, 56.3, 56.7, 57.1, 57.6, 58.2]
-        },
-        "Ni-Cu N04400": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525],
-            "k_W_mK": [21.8, 22.7, 23.5, 24.3, 25.2, 26.1, 26.9, 27.7, 28.5, 29.2, 29.9, 30.6, 31.3, 32.0, 32.8, 33.5, 34.3, 35.1, 36.0, 36.8, 37.7]
-        }
-    },
-    "Titanium Alloys": {
-        "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27": {
-            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850, 875, 900],
-            "k_W_mK": [22.0, 21.4, 21.1, 20.7, 20.5, 20.2, 20.0, 19.9, 19.7, 19.6, 19.5, 19.4, 19.4, 19.3, 19.3, 19.3, 19.4, 19.4, 19.5, 19.6, 19.7, 19.8, 19.9, 20.4, 20.9, 21.4, 21.9, 22.4, 22.9, 23.3, 23.8, 24.3, 24.8, 25.2, 25.6, 25.9]
         }
     },
     "Aluminum Alloys": {
         "A95083": {
             "T_C": [20, 50, 75, 100, 125, 150, 175, 200],
             "k_W_mK": [116.1, 120.6, 123.8, 126.7, 129.5, 132.1, 134.5, 136.7]
+        }
+    },
+    "Titanium Alloys": {
+        "Titanium Gr. 1, 2, 2H, 3, 7, 7H, 11, 12, 16, 16H, 17, 26, 26H, and 27": {
+            "T_C": [20, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850, 875, 900],
+            "k_W_mK": [22.0, 21.4, 21.1, 20.7, 20.5, 20.2, 20.0, 19.9, 19.7, 19.6, 19.5, 19.4, 19.4, 19.3, 19.3, 19.3, 19.4, 19.4, 19.5, 19.6, 19.7, 19.8, 19.9, 20.4, 20.9, 21.4, 21.9, 22.4, 22.9, 23.3, 23.8, 24.3, 24.8, 25.2, 25.6, 25.9]
         }
     }
 }
@@ -143,43 +101,74 @@ MATERIAL_MAP = {
 }
 
 # ---------------------------------------------------------
-# FITTING & VALVE DATABASE (Equivalent Length L_e / D)
-# Reference: Crane TP-410
+# FITTING & VALVE DATABASE (HYSYS / Crane TP-410 & Chisholm B-parameter)
 # ---------------------------------------------------------
-FITTING_LE_D_DB = {
-    "Gate Valve (Fully Open)": 13,
-    "Globe Valve (Fully Open)": 340,
-    "Ball Valve (Fully Open)": 3,
-    "Swing Check Valve": 50,
-    "90° Standard Elbow": 30,
-    "90° Long Radius Elbow": 20,
-    "45° Standard Elbow": 16,
-    "Standard Tee (Flow through run)": 20,
-    "Standard Tee (Flow through branch)": 60
+# HYSYS 기반 K-Factor 연산: K = A(Velocity Head Factor) + B(FT factor) * f_T
+# Chisholm B: 2상 유동(Two-phase) 압력 강하 보정을 위한 파라미터
+HYSYS_FITTING_DB = {
+    "180 Degree Close Return": {"A": 0.0, "B": 50, "Chisholm_B": 2.2},
+    "Angle Valve, 45 deg: Open": {"A": 0.0, "B": 55, "Chisholm_B": 1.5},
+    "Angle Valve, 90 deg: Open": {"A": 0.0, "B": 150, "Chisholm_B": 1.5},
+    "Angle Valve: Open": {"A": 2.0, "B": 0, "Chisholm_B": 1.5},
+    "Ball Valve: Open": {"A": 0.0, "B": 3, "Chisholm_B": 1.5},
+    "Bend: 90, r/d 1": {"A": 0.0, "B": 20, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 1.5": {"A": 0.0, "B": 14, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 10": {"A": 0.0, "B": 30, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 12": {"A": 0.0, "B": 34, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 14": {"A": 0.0, "B": 38, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 16": {"A": 0.0, "B": 42, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 2": {"A": 0.0, "B": 12, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 20": {"A": 0.0, "B": 50, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 3": {"A": 0.0, "B": 12, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 4": {"A": 0.0, "B": 14, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 6": {"A": 0.0, "B": 17, "Chisholm_B": 2.2},
+    "Bend: 90, r/d 8": {"A": 0.0, "B": 24, "Chisholm_B": 2.2},
+    "Blowoff Valve: Open": {"A": 3.0, "B": 0, "Chisholm_B": 1.5},
+    "Butterfly Valve: 10-14in, Open": {"A": 0.0, "B": 35, "Chisholm_B": 1.5},
+    "Butterfly Valve: 16-24in, Open": {"A": 0.0, "B": 25, "Chisholm_B": 1.5},
+    "Butterfly Valve: 2-8in, Open": {"A": 0.0, "B": 45, "Chisholm_B": 1.5},
+    "Butterfly Valve: Angle 10": {"A": 0.52, "B": 0, "Chisholm_B": 1.5},
+    "Butterfly Valve: Angle 20": {"A": 1.54, "B": 0, "Chisholm_B": 1.5},
+    "Butterfly Valve: Angle 40": {"A": 10.8, "B": 0, "Chisholm_B": 1.5},
+    "Butterfly Valve: Angle 5": {"A": 0.24, "B": 0, "Chisholm_B": 1.5},
+    "Butterfly Valve: Angle 60": {"A": 118.0, "B": 0, "Chisholm_B": 1.5},
+    "Check Valve: 45 deg Lift": {"A": 0.0, "B": 55, "Chisholm_B": 1.5},
+    "Check Valve: Ball": {"A": 70.0, "B": 0, "Chisholm_B": 1.5},
+    "Check Valve: Disk": {"A": 10.0, "B": 0, "Chisholm_B": 1.5},
+    "Check Valve: Lift": {"A": 0.0, "B": 600, "Chisholm_B": 1.5},
+    "Check Valve: Swing": {"A": 2.0, "B": 0, "Chisholm_B": 1.5},
+    "Coupling/Union": {"A": 0.04, "B": 0, "Chisholm_B": 1.5},
+    "Diaphram Valve: Half": {"A": 4.3, "B": 0, "Chisholm_B": 1.5},
+    "Diaphram Valve: One Quarter": {"A": 21.0, "B": 0, "Chisholm_B": 1.5},
+    "Diaphram Valve: Open": {"A": 2.3, "B": 0, "Chisholm_B": 1.5},
+    "Diaphram Valve: Three Quarter": {"A": 2.6, "B": 0, "Chisholm_B": 1.5},
+    "Elbow: 45 Long": {"A": 0.2, "B": 0, "Chisholm_B": 2.0},
+    "Elbow: 45 Mitre": {"A": 0.0, "B": 15, "Chisholm_B": 2.0},
+    "Elbow: 45 Std": {"A": 0.0, "B": 16, "Chisholm_B": 2.0},
+    "Elbow: 90 Long": {"A": 0.45, "B": 0, "Chisholm_B": 2.2},
+    "Elbow: 90 Mitre": {"A": 0.0, "B": 60, "Chisholm_B": 2.2},
+    "Elbow: 90 Std": {"A": 0.0, "B": 30, "Chisholm_B": 2.2},
+    "Foot Valve": {"A": 15.0, "B": 0, "Chisholm_B": 1.5},
+    "Foot Valve: Hinged disk": {"A": 0.0, "B": 75, "Chisholm_B": 1.5},
+    "Foot Valve: Poppet disk": {"A": 0.0, "B": 420, "Chisholm_B": 1.5},
+    "Gate Valve, Crane: Open": {"A": 0.0, "B": 8, "Chisholm_B": 1.5},
+    "Gate Valve: Half": {"A": 4.5, "B": 0, "Chisholm_B": 1.5},
+    "Gate Valve: One Quarter": {"A": 24.0, "B": 0, "Chisholm_B": 1.5},
+    "Gate Valve: Open": {"A": 0.17, "B": 0, "Chisholm_B": 1.5},
+    "Gate Valve: Three Quarter": {"A": 0.9, "B": 0, "Chisholm_B": 1.5},
+    "Globe Valve, Crane: Open": {"A": 0.0, "B": 340, "Chisholm_B": 1.5},
+    "Globe Valve: Half": {"A": 9.5, "B": 0, "Chisholm_B": 1.5},
+    "Globe Valve: Open": {"A": 6.0, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Angle 10": {"A": 0.29, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Angle 20": {"A": 1.56, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Angle 40": {"A": 17.3, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Angle 5": {"A": 0.05, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Angle 60": {"A": 206.0, "B": 0, "Chisholm_B": 1.5},
+    "Plug Cock: Open": {"A": 0.0, "B": 18, "Chisholm_B": 1.5},
+    "Tee: As Elbow": {"A": 0.0, "B": 60, "Chisholm_B": 1.8},
+    "Tee: Branch Blanked": {"A": 0.0, "B": 20, "Chisholm_B": 1.5},
+    "Water Meter: Disk": {"A": 7.0, "B": 0, "Chisholm_B": 1.5},
+    "Water Meter: Piston": {"A": 15.0, "B": 0, "Chisholm_B": 1.5},
+    "Water Meter: Rotary": {"A": 10.0, "B": 0, "Chisholm_B": 1.5},
+    "Water Meter: Turbine": {"A": 6.0, "B": 0, "Chisholm_B": 1.5}
 }
-
-"""
-GENERAL NOTES:
-(a) TC is the thermal conductivity, W/(m·°C), and TD is the thermal diffusivity, 10−6 m2/sec:
-(b) Values of thermal conductivity and thermal diffusivity should be used with the understanding that there is an associated
-±10% uncertainty. This uncertainty results from compositional variations and variables associated with original
-data acquisition and analysis.
-
-NOTES:
-(1) Material Group A includes those materials listed as “Carbon steel” in the Nominal Composition column in Tables 1A,
-2A, 3, 5A, U, or Y-1.
-(2) Material Group B includes those materials listed as “C–Mn–Si–Cb,” “C–Mn–Si–V,” “C–Mn–Si–V–Cb,” “C–Mn–Ti,” or “C–
-Si–Ti” in the Nominal Composition column in Tables 1A, 2A, 3, 5A, U, or Y–1. 
-(3) Material Group C includes the following carbon–moly steels: C–1/4Mo, C–1/2Mo
-The following low chrome steels: 1/2Cr–1/5Mo–V... 
-(4) Material Group D includes the following low chrome steels: 21/4Cr–1Mo, 3Cr–1Mo... The following nickel steels: 5Ni–1/4Mo, 7Ni, 8Ni, 9Ni
-(5) Material Group E includes: 5Cr–1/2Mo, 5Cr–1/2Mo–Si, 5Cr–1/2Mo–Ti
-(6) Material Group F includes: 9Cr–1Mo
-(7) Material Group G includes: 12Cr, 12Cr–1Al, 13Cr, 13Cr–4Ni, 15Cr, 17Cr
-(8) Material Group H includes: 27Cr
-(9) Material Group I includes: 17Cr–4Ni–4Cu, 15Cr–5Ni–3Mo (only to 425°C)
-(10) Material Group J includes: 15Cr–6Ni–Cu–Mo, 18Cr–8Ni, 18Cr–8Ni–S (or Se), 18Cr–11Ni, 22Cr–2Ni–Mo–N, 23Cr–4Ni–Mo–Cu
-These thermal conductivity and diffusivity values are also appropriate for H, L, N, and LN grades of austenitic stainless steels.
-(11) Material Group K includes: 13Cr–8Ni–2Mo, 25Ni–15Cr–2Ti, 16Cr–12Ni–2Mo, 18Cr–5Ni–3Mo, 22Cr–5Ni–3Mo–N, 25Cr–7Ni–4Mo–N, 25Cr–20Ni
-(12) Material Group L includes: 14Cr–16Ni–6Si–Cu–Mo, 18Cr–18Ni–2Si, 25Cr–12Ni
-"""
