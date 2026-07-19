@@ -54,9 +54,12 @@ def calculate_fT_hysys(roughness, D_inner):
 
 def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_deg, roughness, P_Pa):
     """
+def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner, angle_deg, roughness, P_Pa):
+    """
     [Beggs and Brill (1973) Rigorous Model]
     사용자 지적사항 반영 완료: Transition 영역의 가중 보간법(Interpolation) 적용 및
     액체 속도수(N_VL) 기반의 엄밀한 경사 보정 계수(Inclination Correction) 복원.
+    CoolProp에서 추출한 실제 표면장력(sigma_L) 변수 추가 연동.
     """
     v_m = v_SL + v_SG # 혼합물 유속
     if v_m <= 0: v_m = 1e-6
@@ -64,9 +67,6 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_d
     
     # 무차원 수 계산
     N_Fr = max((v_m**2) / (9.81 * D_inner), 1e-5) # Froude Number
-    
-    # 표면장력(sigma)은 혼합물 특성상 동적 추출이 어려워 탄화수소 범용값(0.02 N/m) 가정
-    sigma_L = 0.02  
     N_VL = v_SL * ((rho_L / (9.81 * sigma_L))**0.25) # Liquid Velocity Number
     
     # 유동 양식 경계값 계산
@@ -251,10 +251,13 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             mu_L = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-3, audit_tracker)
             mu_G = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
             
+            # CoolProp에서 표면장력('I') 추출 시도, 실패 시 탄화수소 기본값 0.02 N/m 방어 기제 적용
+            sigma_L = get_robust_prop('I', T_avg, P_avg, fluid_string, norm_fractions, 0.02, audit_tracker)
+            
             v_SG = (mass_flow * Q_val) / (rho_G * A_cross)
             v_SL = (mass_flow * (1 - Q_val)) / (rho_L * A_cross)
             
-            bb = calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, D_inner, angle_deg, roughness, P_avg)
+            bb = calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner, angle_deg, roughness, P_avg)
             dP_fric = ((bb["f_tp"] * bb["rho_n"] * bb["v_m"]**2) / (2 * D_inner)) * dL
             dP_total = (dP_fric + bb["dP_dl_elev"] * dL) / (1 - bb["E_k"])
             regime = bb["flow_regime"]
