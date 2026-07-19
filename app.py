@@ -61,8 +61,8 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
     lambda_L = max(v_SL / v_m, 1e-5) # 입력 액체 체적비 (No-slip holdup)
     
     # 무차원 수 계산 (관성력, 중력, 표면장력)
-    N_Fr = max((v_m**2) / (9.81 * D_inner), 1e-5) # Froude Number
-    N_VL = v_SL * ((rho_L / (9.81 * sigma_L))**0.25) # Liquid Velocity Number
+    N_Fr = max((v_m**2) / (9.81 * D_inner), 1e-5) # Froude Number (중력 대비 관성력)
+    N_VL = v_SL * ((rho_L / (9.81 * sigma_L))**0.25) # Liquid Velocity Number (표면장력 포함)
     
     # 유동 양식 경계값 계산
     L1 = 316 * lambda_L**0.302
@@ -78,7 +78,7 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
     
     # 내부 헬퍼 함수: 특정 유동 양식에 대한 수평 홀드업 및 경사 보정계수 도출
     def get_holdup_and_C(reg_type):
-        # 1. 수평 홀드업 계산
+        # 1. 수평 홀드업 계산 계수
         if reg_type == "Segregated": a, b, c = 0.98, 0.4846, 0.0868
         elif reg_type == "Intermittent": a, b, c = 0.845, 0.5351, 0.0173
         else: a, b, c = 1.065, 0.5824, 0.0609 # Distributed
@@ -90,21 +90,22 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
         if angle_deg >= 0: # Uphill (상향 유동 및 수평)
             if reg_type == "Segregated": d, e, f, g = 0.011, -3.768, 3.539, -1.614
             elif reg_type == "Intermittent": d, e, f, g = 2.96, 0.305, -0.4473, 0.0978
-            else: d, e, f, g = 0, 0, 0, 0 # Distributed
-        else: # Downhill (하향 유동 - 모든 Regime 공통 상수)
+            else: d, e, f, g = 0, 0, 0, 0 # Distributed (보정 안함)
+        else: # Downhill (하향 유동 - 논문에 따라 모든 유동 양식 공통 상수 적용!)
             d, e, f, g = 4.70, -0.3692, 0.1244, -0.5056
             
-        # 경사 보정계수 수식 계산
+        # 3. 경사 보정계수 수식 계산
         if d == 0: 
-            C_val = 0
+            C_val = 0 # Distributed의 경우 즉시 0 반환 (log(0) 에러 방지)
         else: 
+            # 1e-5 방어기제는 값이 0에 수렴하여 math.log 연산이 터지는 것을 막기 위함입니다.
             C_val = (1 - lambda_L) * math.log(max(d * (lambda_L**e) * (N_VL**f) * (N_Fr**g), 1e-5))
         
         return H_L_0, C_val
 
     # 유동 양식에 따른 실제 액체 홀드업(H_L) 결정 로직
     if regime == "Transition":
-        # Transition 영역 보간법 (Segregated와 Intermittent 사이)
+        # Transition 영역 보간법 (Segregated와 Intermittent 사이의 가중 평균)
         H_L_0_seg, C_seg = get_holdup_and_C("Segregated")
         H_L_0_int, C_int = get_holdup_and_C("Intermittent")
         
@@ -117,11 +118,11 @@ def calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner
         H_L_0, C_val = get_holdup_and_C(regime)
         H_L = H_L_0 * (1 + C_val * math.sin(math.radians(angle_deg)))
         
-    H_L = min(max(H_L, 0.0), 1.0)
+    H_L = min(max(H_L, 0.0), 1.0) # 홀드업이 0~1을 벗어나지 않도록 방어
 
     # 2상 유동의 혼합 물성치 (밀도 및 점도)
-    rho_n = rho_L * lambda_L + rho_G * (1 - lambda_L)
-    rho_s = rho_L * H_L + rho_G * (1 - H_L)
+    rho_n = rho_L * lambda_L + rho_G * (1 - lambda_L) # No-slip 밀도 (마찰 계산용)
+    rho_s = rho_L * H_L + rho_G * (1 - H_L)           # Slip 밀도 (고저차 계산용)
     mu_n = mu_L * lambda_L + mu_G * (1 - lambda_L)
     Re_n = (rho_n * v_m * D_inner) / mu_n
     
@@ -153,6 +154,7 @@ def get_robust_prop(prop, T, P, fluid_string, fractions, default_val, tracker):
     """
     [혼합물(Mixture) 물성치 계산 안전장치 및 추적기(Audit Trail)]
     CoolProp이 지원하지 않는 혼합물 전달물성치(점도, 표면장력 등)에 대한 우회 기법입니다.
+    이 우회 기법이 쓰일 때마다 tracker(바구니)에 쪽지를 남겨 엔지니어에게 알립니다.
     """
     try:
         return PropsSI(prop, 'T', T, 'P', P, fluid_string)
@@ -174,7 +176,7 @@ def calculate_heat_transfer(Re, Pr, k_fluid, D_in, D_out, k_pipe, k_ins, t_ins, 
     [1차원 반경 방향 열 저항 네트워크(Thermal Resistance Network)]
     열전달 저항들을 직렬 합산하여 총괄 열전달 계수(U)를 구합니다.
     """
-    Nu = 0.023 * (Re**0.8) * (Pr**0.3) if Re > 2300 else 4.36 # 대류 열전달
+    Nu = 0.023 * (Re**0.8) * (Pr**0.3) if Re > 2300 else 4.36 # 대류 열전달 (Dittus-Boelter)
     h_in = (Nu * k_fluid) / D_in if D_in > 0 else 1000
     R_conv_in = 1.0 / (h_in * math.pi * D_in)
     R_cond_pipe = math.log(D_out / D_in) / (2 * math.pi * k_pipe) if D_out > D_in else 0
@@ -213,7 +215,7 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             try: Q_val = PropsSI('Q', 'T', T_avg, 'P', P_avg, fluid_string)
             except: is_twophase = False
             
-        if not is_twophase: # 단상 유동
+        if not is_twophase: # 단상 유동 (가속도 항 불필요, Darcy 수식 적용)
             rho = PropsSI('D', 'T', T_avg, 'P', P_avg, fluid_string)
             mu = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
             vel = mass_flow / (rho * A_cross)
@@ -228,7 +230,7 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             mu_L = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-3, audit_tracker)
             mu_G = get_robust_prop('V', T_avg, P_avg, fluid_string, norm_fractions, 1e-5, audit_tracker)
             
-            # ⭐️ CoolProp에서 실제 표면장력 호출 시도, 에러 시 0.02 방어 ⭐️
+            # ⭐️ CoolProp에서 실제 표면장력 호출 시도, 에러 시 0.02(탄화수소 범용값) 방어 ⭐️
             sigma_L = get_robust_prop('I', T_avg, P_avg, fluid_string, norm_fractions, 0.02, audit_tracker)
             
             v_SG = (mass_flow * Q_val) / (rho_G * A_cross)
@@ -236,34 +238,56 @@ def solve_inner_loop_pressure(T_in, P_in, T_out_guess, fluid_string, norm_fracti
             
             bb = calculate_beggs_brill(v_SL, v_SG, rho_L, rho_G, mu_L, mu_G, sigma_L, D_inner, angle_deg, roughness, P_avg)
             dP_fric = ((bb["f_tp"] * bb["rho_n"] * bb["v_m"]**2) / (2 * D_inner)) * dL
-            dP_total = (dP_fric + bb["dP_dl_elev"] * dL) / (1 - bb["E_k"])
+            
+            # 분모에 가속도 인자 (1 - E_k) 필수 적용 (2상 유동 기화 팽창 모사)
+            dP_total = (dP_fric + bb["dP_dl_elev"] * dL) / (1 - bb["E_k"]) 
             regime = bb["flow_regime"]
             
         return P_in - dP_total, is_twophase, Q_val, regime
 
-    P_calc0, is_tp0, Q0, reg0 = calc_P_out(P0)
-    f0 = P_calc0 - P0 
-    if abs(f0) < tol: return P_calc0, is_tp0, Q0, reg0
-        
-    P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
-    f1 = P_calc1 - P1
+    # -------------------------------------------------------------
+    # [할선법(Secant Method) 수치해석 시작]
+    # 출구 압력(P_out)을 알려면 밀도/점도를 알아야 하고,
+    # 밀도/점도를 알려면 평균 압력(P_avg)을 알아야 하는 순환 참조 문제를 해결합니다.
+    # -------------------------------------------------------------
     
-    for _ in range(20): # 할선법
+    # 1. 첫 번째 점(P0) 테스트: 입구 압력과 같을 것이라고 대충 가정해봄
+    P_calc0, is_tp0, Q0, reg0 = calc_P_out(P0)
+    f0 = P_calc0 - P0 # 찍은 값(P0)과 실제 계산된 값(P_calc0)의 오차(에러)
+    if abs(f0) < tol: return P_calc0, is_tp0, Q0, reg0 # 운 좋게 맞추면 바로 종료
+        
+    # 2. 두 번째 점(P1) 테스트: 500Pa 정도 떨어졌을 것이라고 두 번째 가정을 해봄
+    P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
+    f1 = P_calc1 - P1 
+    
+    # 3. 오차가 0이 될 때까지 최대 20번 반복하며 정답 추적
+    for _ in range(20):
+        # 방금 계산한 오차가 허용치(100Pa) 이내로 들어왔다면 정답 도달!
         if abs(f1) < tol: return P_calc1, is_tp1, Q1, reg1
         
-        if abs(f1 - f0) < 1e-5: P_new = P1 - f1 * 0.5 
-        else: P_new = P1 - f1 * ((P1 - P0) / (f1 - f0))
+        # 4. 다음 압력 예측 (할선법 공식 적용)
+        # 만약 두 오차의 차이가 거의 없다면(기울기 분모가 0), 에러 방지를 위해 0.5배만 안전하게 이동시킴
+        if abs(f1 - f0) < 1e-5: 
+            P_new = P1 - f1 * 0.5 
+        else: 
+            # 과거의 두 점(P0, P1)을 이은 할선(기울기)을 연장하여 오차가 0이 될 것 같은 새로운 점(P_new)을 수식으로 예측
+            P_new = P1 - f1 * ((P1 - P0) / (f1 - f0))
         
-        P0, f0 = P1, f1; P1 = P_new
+        # 5. 세대 교체 (과거 데이터는 버리고 업데이트)
+        P0, f0 = P1, f1      # 기존의 현재 점(P1)은 이제 과거 점(P0)이 됨
+        P1 = P_new           # 새롭게 예측한 점이 이제 현재 점(P1)이 됨
+        
+        # 6. 업데이트된 점으로 물리 공식을 다시 계산하여 새로운 오차(f1) 확인
         P_calc1, is_tp1, Q1, reg1 = calc_P_out(P1)
         f1 = P_calc1 - P1
 
+    # 20번을 돌았는데도 허용 오차를 못 맞췄다면, 가장 근접하게 구한 마지막 값을 반환
     return P1, is_tp1, Q1, reg1 
 
 def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, A_cross, D_inner, D_outer, roughness, angle_deg, dL, k_pipe, k_ins, t_ins, h_ext, T_amb_K, audit_tracker):
     """
     [Middle Loop: 에너지 수지를 통한 온도 수렴 알고리즘 (PH-Flash 기반)]
-    가상의 출구 온도에서 발생하는 열교환량(Q)을 엔탈피에 반영해, 상태방정식이 말하는 진짜 온도를 할선법으로 찾음.
+    가상의 출구 온도에서 발생하는 열교환량(Q)을 엔탈피에 반영해, 진짜 온도를 할선법으로 찾음.
     """
     T0 = T_in          
     T1 = T_in - 0.1    
@@ -297,6 +321,7 @@ def solve_middle_loop_temp(T_in, P_in, fluid_string, norm_fractions, mass_flow, 
             except: pass
         return T_in + Q_heat / (mass_flow * Cp), P_out_calc, is_tp, Q_val, regime
 
+    # 온도를 찾기 위한 할선법(Secant Method) - Inner Loop와 동일한 구조
     T_calc0, P_calc0, is_tp0, Q0, reg0 = calc_T_out(T0)
     f0 = T_calc0 - T0
     if abs(f0) < tol: return T_calc0, P_calc0, is_tp0, Q0, reg0
@@ -409,7 +434,7 @@ if st.session_state.pipeline:
 st.header("3. 외부 환경 (전체 공통 적용)")
 col_env1, col_env2, col_env3 = st.columns(3)
 T_amb_C = col_env1.number_input("대기 온도 (°C)", value=25.0)
-h_ext = col_env2.number_input("외부 대류 열전달 계수 (W/m²K)", value=10.0)
+h_ext = col_env2.number_input("외부 대류 열전달 계수 (W/m²K)", value=10.0, help="실내: 10, 야외: 25, 해저: 1000 을 보통 설계 기준으로 적용합니다.")
 N_per_pipe = col_env3.number_input("구간(Pipe)당 분할 노드 수", min_value=1, value=10, step=1, help="Middle Loop 수렴으로 5~10 분할만으로도 HYSYS급 초정밀 해를 보장합니다.")
 
 col_env4, col_env5 = st.columns(2)
@@ -448,10 +473,11 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
     status_box = st.status("🤖 V6 디커플링 물리 엔진 및 PH-Flash 해석 진행 중...", expanded=True)
     
     try:
+        # 배관(Pipe)과 피팅(Fitting)의 물리 연산 로직을 완벽하게 분리(Decoupling)하여 처리합니다.
         for comp_idx, comp in enumerate(st.session_state.pipeline):
             
             # ----------------------------------------
-            # A. 직관(Pipe) 해석 블록: 3중 중첩 루프 적용
+            # A. 직관(Pipe) 해석 블록: 공간 분할(Discretization) 및 3중 루프
             # ----------------------------------------
             if comp.get("type") == "Pipe":
                 status_box.update(label=f"🔄 [Pipe {comp_idx+1}/{len(st.session_state.pipeline)}] 3중 루프(Outer-Middle-Inner) P-T 수렴 계산 중...")
@@ -496,7 +522,8 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                     })
 
             # ----------------------------------------
-            # B. 피팅/밸브(Fitting) 해석 블록: 국부 저항 독립 계산
+            # B. 피팅/밸브(Fitting) 해석 블록: 집중 정수(Lumped Parameter) 모델
+            # 길이를 쪼개지 않고 해당 지점에서 찰나에 발생하는 압력강하와 등엔탈피 냉각을 한 번에 계산
             # ----------------------------------------
             elif comp.get("type") == "Fitting":
                 f_name = comp.get("name", "Unknown")
@@ -538,6 +565,7 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
                 if P_out_fit < 10000: raise ValueError(f"[{comp_idx+1}번 밸브] 밸브 통과 후 진공({P_out_fit/1e5:.3f} bar)에 도달!")
                 
                 # PH-Flash 기반 등엔탈피 팽창 (Isenthalpic Throttling / Joule-Thomson 냉각)
+                # 밸브 통과 전과 후의 엔탈피(H)가 같다는 열역학 제1법칙을 이용해, 낮아진 압력에서의 진짜 온도를 역산함
                 try:
                     H_in = PropsSI('H', 'T', T_current_K, 'P', P_current_Pa, fluid_string)
                     T_out_fit = PropsSI('T', 'H', H_in, 'P', P_out_fit, fluid_string)
@@ -585,14 +613,20 @@ if st.button("🚀 해석 실행 (Run Simulator)", type="primary"):
             name='Valve/Fitting', hovertext=fittings_df['Component']
         ))
     
-    fig_2d.update_layout(title_text="파이프라인 2D 스케치 (Side View)", xaxis_title_text="누적 길이 (m)", yaxis_title_text="고도 (m)", showlegend=True)
+    # 최신 Plotly 문법 (title=dict(text=...)) 적용
+    fig_2d.update_layout(
+        title=dict(text="파이프라인 2D 스케치 (Side View)"), 
+        xaxis=dict(title=dict(text="누적 길이 (m)")), 
+        yaxis=dict(title=dict(text="고도 (m)")), 
+        showlegend=True
+    )
     
     fig_pt = go.Figure()
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["P (bar)"], mode='lines', name='Pressure (bar)', yaxis='y1', line=dict(color='blue', width=3)))
     fig_pt.add_trace(go.Scatter(x=df_res["L_cum (m)"], y=df_res["T (°C)"], mode='lines', name='Temperature (°C)', yaxis='y2', line=dict(color='red', width=3, dash='dash')))
     
     fig_pt.update_layout(
-        title=dict(text="압력 및 온도 프로파일 (Valve 통과 시 급격한 하강 주목)"),
+        title=dict(text="압력 및 온도 프로파일 (Valve 통과 시 급격한 하강 및 J-T 냉각 주목)"),
         xaxis=dict(title=dict(text="누적 길이 (m)")),
         yaxis=dict(
             title=dict(text="압력 (bar)", font=dict(color="blue")),
